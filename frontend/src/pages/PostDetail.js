@@ -12,13 +12,16 @@ export default function PostDetail() {
   const [post, setPost] = useState(null);
   const [comments, setComments] = useState([]);
   const [text, setText] = useState("");
+  const [asAdmin, setAsAdmin] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [boostInput, setBoostInput] = useState(0);
 
   const load = useCallback(async () => {
     try {
       const [p, c] = await Promise.all([api.get(`/posts/${id}`), api.get(`/posts/${id}/comments`)]);
       setPost(p.data);
       setComments(c.data);
+      setBoostInput(p.data.boost_likes ?? 0);
     } catch (err) {
       toast.error(formatApiError(err.response?.data?.detail));
       navigate("/feed");
@@ -40,7 +43,7 @@ export default function PostDetail() {
     if (!window.confirm("이 글을 신고할까요? 3회 누적 시 블라인드 처리됩니다.")) return;
     try {
       const { data } = await api.post(`/posts/${id}/report`);
-      toast.success(`신고 접수되었습니다 (${data.report_count}/3)`);
+      toast.success(`신고 접수 (${data.report_count}/3)`);
       if (data.report_count >= 3) load();
     } catch (err) {
       toast.error(formatApiError(err.response?.data?.detail));
@@ -63,10 +66,11 @@ export default function PostDetail() {
     if (!text.trim()) return;
     setSubmitting(true);
     try {
-      const { data } = await api.post(`/posts/${id}/comments`, { content: text });
+      const { data } = await api.post(`/posts/${id}/comments`, { content: text, as_admin: asAdmin });
       setComments((cs) => [...cs, data]);
       setPost((p) => ({ ...p, comment_count: (p.comment_count || 0) + 1 }));
       setText("");
+      setAsAdmin(false);
     } catch (err) {
       toast.error(formatApiError(err.response?.data?.detail));
     } finally {
@@ -93,8 +97,17 @@ export default function PostDetail() {
     }
   };
 
-  if (!post) return <div className="text-xs fp-mono uppercase tracking-[0.3em] text-[var(--text-mute)]">Loading.</div>;
+  const applyBoost = async () => {
+    try {
+      const { data } = await api.post(`/admin/posts/${id}/boost`, { boost: parseInt(boostInput) || 0 });
+      toast.success(`Boost set: ${data.boost}`);
+      load();
+    } catch (err) {
+      toast.error(formatApiError(err.response?.data?.detail));
+    }
+  };
 
+  if (!post) return <div className="text-xs fp-mono uppercase tracking-[0.3em] text-[var(--text-mute)]">Loading.</div>;
   const blindedToView = post.blinded && !user?.is_admin;
 
   return (
@@ -104,10 +117,11 @@ export default function PostDetail() {
       </button>
 
       <article data-testid="post-detail">
-        <div className="flex items-center gap-3 text-[10px] uppercase tracking-[0.3em] fp-mono text-[var(--text-mute)] mb-4">
+        <div className="flex items-center gap-3 text-[10px] uppercase tracking-[0.3em] fp-mono text-[var(--text-mute)] mb-4 flex-wrap">
           <span className={post.is_admin_post ? "text-[var(--red)]" : ""}>{post.author_label}</span>
           <span>·</span>
           <span>{relTime(post.created_at)}</span>
+          {post.is_champion && <><span>·</span><span style={{color:"#D4AF37"}}>★ Champion</span></>}
           {post.blinded && <><span>·</span><span className="text-[var(--red)]">Blinded {post.report_count != null ? `(${post.report_count})` : ""}</span></>}
           <span className="ml-auto" />
           {post.is_mine || user?.is_admin ? (
@@ -122,7 +136,7 @@ export default function PostDetail() {
           <p className="text-base leading-relaxed text-[var(--text)] whitespace-pre-wrap">{post.content}</p>
         </div>
 
-        <div className="mt-10 pt-6 border-t border-[var(--line)] flex items-center gap-6 text-[10px] uppercase tracking-[0.3em] fp-mono text-[var(--text-mute)]">
+        <div className="mt-10 pt-6 border-t border-[var(--line)] flex items-center gap-6 text-[10px] uppercase tracking-[0.3em] fp-mono text-[var(--text-mute)] flex-wrap">
           <button onClick={toggleLike} className={`hover:text-[var(--text)] flex items-center gap-2 ${post.liked_by_me ? "text-[var(--red)]" : ""}`} data-testid="detail-like-btn">
             {post.liked_by_me && <span className="fp-dot"/>}
             Like {post.like_count}
@@ -134,6 +148,39 @@ export default function PostDetail() {
             </button>
           )}
         </div>
+
+        {/* Admin like manipulation */}
+        {user?.is_admin && (
+          <div className="mt-6 p-5 border border-[var(--red)]" data-testid="admin-boost-panel">
+            <div className="text-[10px] fp-mono uppercase tracking-[0.4em] text-[var(--red)] mb-3">Admin · Like Pump</div>
+            <div className="flex items-center gap-4 flex-wrap">
+              <span className="text-xs fp-mono text-[var(--text-mute)]">
+                Real {post.real_like_count ?? 0} + Boost {post.boost_likes ?? 0} = <span className="text-[var(--text)]">{post.like_count}</span>
+              </span>
+            </div>
+            <div className="mt-3 flex items-center gap-3">
+              <input
+                type="range"
+                min="0"
+                max="200"
+                value={boostInput}
+                onChange={(e) => setBoostInput(e.target.value)}
+                className="flex-1 accent-[var(--red)]"
+                data-testid="boost-slider"
+              />
+              <input
+                type="number"
+                min="0"
+                max="10000"
+                value={boostInput}
+                onChange={(e) => setBoostInput(e.target.value)}
+                className="fp-input w-24 text-center"
+                data-testid="boost-number"
+              />
+              <button onClick={applyBoost} className="fp-btn fp-btn-red text-xs" data-testid="boost-apply">Apply</button>
+            </div>
+          </div>
+        )}
       </article>
 
       <section data-testid="comments-section">
@@ -151,8 +198,24 @@ export default function PostDetail() {
             required
             data-testid="comment-input"
           />
-          <div className="flex justify-end">
-            <button type="submit" disabled={submitting} className="fp-btn" data-testid="submit-comment-btn">Post</button>
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            {user?.is_admin && (
+              <label className="flex items-center gap-2 text-xs fp-mono uppercase tracking-[0.25em] cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={asAdmin}
+                  onChange={(e) => setAsAdmin(e.target.checked)}
+                  className="accent-[var(--red)]"
+                  data-testid="comment-as-admin"
+                />
+                <span className={asAdmin ? "text-[var(--red)]" : "text-[var(--text-mute)]"}>
+                  운영자로 표시
+                </span>
+              </label>
+            )}
+            <button type="submit" disabled={submitting} className={`fp-btn ${asAdmin ? "fp-btn-red" : ""}`} data-testid="submit-comment-btn">
+              Post
+            </button>
           </div>
         </form>
 
@@ -163,8 +226,11 @@ export default function PostDetail() {
             </div>
           ) : comments.map((c) => (
             <div key={c.id} className="py-4" data-testid={`comment-${c.id}`}>
-              <div className="flex items-center gap-3 text-[10px] uppercase tracking-[0.3em] fp-mono text-[var(--text-mute)] mb-2">
-                <span className={c.is_admin_post ? "text-[var(--red)]" : ""}>{c.author_label}</span>
+              <div className="flex items-center gap-3 text-[10px] uppercase tracking-[0.3em] fp-mono text-[var(--text-mute)] mb-2 flex-wrap">
+                <span className={c.display_as_admin ? "text-[var(--red)]" : ""}>{c.author_label}</span>
+                {c.display_as_admin && (
+                  <span className="px-1.5 py-0.5 border border-[var(--red)] text-[var(--red)] text-[9px]">ADMIN</span>
+                )}
                 <span>·</span>
                 <span>{relTime(c.created_at)}</span>
                 {(c.is_mine || user?.is_admin) && (

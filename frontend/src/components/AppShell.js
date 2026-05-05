@@ -27,20 +27,15 @@ export default function AppShell() {
 
   return (
     <div className="min-h-screen bg-[var(--bg)] text-[var(--text)]">
-      {/* Top minimal bar */}
       <header className="border-b border-[var(--line)]">
         <div className="max-w-5xl mx-auto px-6 h-14 flex items-center justify-between">
-          <div
-            onClick={() => navigate("/feed")}
-            className="cursor-pointer flex items-center gap-2"
-            data-testid="brand-logo"
-          >
+          <div onClick={() => navigate("/feed")} className="cursor-pointer flex items-center gap-2" data-testid="brand-logo">
             <span className="font-bold text-base tracking-tight">5P</span>
             <span className="fp-dot" />
           </div>
           <div className="flex items-center gap-5 text-xs uppercase tracking-[0.25em] fp-mono">
             {user?.is_admin && <span className="text-[var(--red)]" data-testid="admin-badge">ADMIN</span>}
-            <span className="text-[var(--text-mute)]" data-testid="user-email">{user?.email}</span>
+            <span className="text-[var(--text-mute)] hidden sm:inline" data-testid="user-email">{user?.email}</span>
             <button onClick={handleLogout} className="text-[var(--text-dim)] hover:text-[var(--text)]" data-testid="logout-btn">
               Logout
             </button>
@@ -51,9 +46,11 @@ export default function AppShell() {
       <div className="max-w-5xl mx-auto px-6 py-8 grid grid-cols-1 md:grid-cols-12 gap-10">
         <aside className="md:col-span-3 space-y-1">
           {link("/feed", "Feed", "nav-feed")}
+          {link("/champions", "★ Champions", "nav-champions")}
           {link("/post/new", "Compose", "nav-new")}
           {link("/messages", "Messages", "nav-messages")}
           {link("/profile", "Profile", "nav-profile")}
+          {user?.is_admin && link("/admin", "Admin · Console", "nav-admin")}
           <div className="pt-8">
             <div className="text-[10px] uppercase tracking-[0.3em] text-[var(--text-mute)] fp-mono">Slogan</div>
             <div className="text-xs text-[var(--text-dim)] mt-2 leading-relaxed">

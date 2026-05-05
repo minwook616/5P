@@ -72,8 +72,9 @@ export default function Login() {
           </button>
         </form>
 
-        <div className="mt-10 text-xs text-[var(--text-mute)] fp-mono uppercase tracking-[0.2em]">
-          New here? <Link to="/register" className="text-[var(--text)] hover:text-[var(--red)]" data-testid="goto-register">Start →</Link>
+        <div className="mt-10 flex items-center justify-between text-xs text-[var(--text-mute)] fp-mono uppercase tracking-[0.2em]">
+          <Link to="/register" className="text-[var(--text)] hover:text-[var(--red)]" data-testid="goto-register">Start →</Link>
+          <Link to="/forgot" className="hover:text-[var(--text)]" data-testid="goto-forgot">Forgot?</Link>
         </div>
       </div>
     </div>

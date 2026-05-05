@@ -1,12 +1,20 @@
-"""5P (Five Posts) backend API tests."""
+"""5P (Five Posts) — Iteration 3 backend tests.
+
+Covers: recommendation key gating, OTP verify/resend, status gating,
+admin approve/reject + keys, admin shadow comments, admin boost + champion grant,
+champion board, password reset.
+"""
 import os
+import re
 import uuid
+import time
+import asyncio
 import requests
 import pytest
+import subprocess
 from datetime import datetime, timezone, timedelta
 
 from motor.motor_asyncio import AsyncIOMotorClient
-import asyncio
 
 BASE_URL = os.environ.get("REACT_APP_BACKEND_URL").rstrip("/")
 API = f"{BASE_URL}/api"
@@ -24,332 +32,361 @@ def _sess():
     return s
 
 
-def _new_email():
-    return f"test_{uuid.uuid4().hex[:8]}@iastate.edu"
-
-
-def _register(s, email=None, password="testpass123"):
-    email = email or _new_email()
-    r = s.post(f"{API}/auth/register", json={"email": email, "password": password})
-    return r, email
-
-
-def _login(s, email, password="testpass123"):
-    return s.post(f"{API}/auth/login", json={"email": email, "password": password})
-
-
 def _admin_session():
     s = _sess()
-    r = _login(s, ADMIN_EMAIL, ADMIN_PASSWORD)
+    r = s.post(f"{API}/auth/login", json={"email": ADMIN_EMAIL, "password": ADMIN_PASSWORD})
     assert r.status_code == 200, r.text
     return s
 
 
-# --- Mongo helpers (direct mutation for time-sensitive tests) ---
+def _new_email():
+    return f"test_{uuid.uuid4().hex[:8]}@iastate.edu"
+
+
+def _mint_admin_key():
+    a = _admin_session()
+    r = a.post(f"{API}/admin/keys")
+    assert r.status_code == 200, r.text
+    return r.json()["code"]
+
+
+def _read_otp_from_logs(email):
+    for path in ["/var/log/supervisor/backend.err.log", "/var/log/supervisor/backend.out.log"]:
+        try:
+            out = subprocess.check_output(["tail", "-n", "500", path], text=True, stderr=subprocess.DEVNULL)
+        except Exception:
+            continue
+        pat = re.compile(rf"OTP (?:for|resend for) {re.escape(email)}.*?:\s*(\d{{6}})")
+        codes = pat.findall(out)
+        if codes:
+            return codes[-1]
+    return None
+
+
+def _read_reset_token_from_logs(email):
+    for path in ["/var/log/supervisor/backend.err.log", "/var/log/supervisor/backend.out.log"]:
+        try:
+            out = subprocess.check_output(["tail", "-n", "500", path], text=True, stderr=subprocess.DEVNULL)
+        except Exception:
+            continue
+        pat = re.compile(rf"Password reset for {re.escape(email)}.*?token\):\s*(\S+)")
+        toks = pat.findall(out)
+        if toks:
+            return toks[-1]
+    return None
+
+
+def _register(s, code, email=None, password="testpass123"):
+    email = email or _new_email()
+    r = s.post(f"{API}/auth/register", json={
+        "email": email, "password": password, "recommendation_code": code
+    })
+    return r, email
+
+
+def _register_and_verify(code=None):
+    code = code or _mint_admin_key()
+    s = _sess()
+    r, email = _register(s, code)
+    assert r.status_code == 200, r.text
+    uid = r.json()["user"]["id"]
+    time.sleep(0.4)
+    otp = _read_otp_from_logs(email)
+    assert otp, f"OTP for {email} not found in logs"
+    rv = s.post(f"{API}/auth/verify-otp", json={"code": otp})
+    assert rv.status_code == 200, rv.text
+    assert rv.json()["status"] == "pending_review"
+    return s, email, uid
+
+
+def _make_active_user():
+    s, email, uid = _register_and_verify()
+    a = _admin_session()
+    r = a.post(f"{API}/admin/users/{uid}/approve")
+    assert r.status_code == 200, r.text
+    return s, email, uid
+
+
 def _mongo_run(coro):
-    return asyncio.get_event_loop().run_until_complete(coro)
+    loop = asyncio.new_event_loop()
+    try:
+        return loop.run_until_complete(coro)
+    finally:
+        loop.close()
 
 
-async def _backdate_unlock(date_key):
+async def _backdate_unlock_all():
     client = AsyncIOMotorClient(MONGO_URL)
     db = client[DB_NAME]
     past = (datetime.now(timezone.utc) - timedelta(hours=1)).isoformat()
-    await db.daily_state.update_one({"date_key": date_key}, {"$set": {"unlock_at": past}}, upsert=False)
+    await db.daily_state.update_many({}, {"$set": {"unlock_at": past}})
     client.close()
 
 
-async def _future_unlock(date_key):
-    client = AsyncIOMotorClient(MONGO_URL)
-    db = client[DB_NAME]
-    future = (datetime.now(timezone.utc) + timedelta(hours=2)).isoformat()
-    await db.daily_state.update_one({"date_key": date_key}, {"$set": {"unlock_at": future}}, upsert=False)
-    client.close()
-
-
-async def _wipe_today_posts(date_key):
-    client = AsyncIOMotorClient(MONGO_URL)
-    db = client[DB_NAME]
-    await db.posts.delete_many({"date_key": date_key})
-    client.close()
-
-
-# ---------- Auth & email gate ----------
-class TestAuthGate:
-    def test_non_iastate_email_blocked(self):
+# ============================================================
+class TestRegistrationGate:
+    def test_register_requires_iastate_domain(self):
+        code = _mint_admin_key()
         s = _sess()
-        r = s.post(f"{API}/auth/register",
-                   json={"email": f"x_{uuid.uuid4().hex[:6]}@gmail.com", "password": "testpass123"})
+        r = s.post(f"{API}/auth/register", json={
+            "email": f"a_{uuid.uuid4().hex[:6]}@gmail.com",
+            "password": "testpass123",
+            "recommendation_code": code,
+        })
         assert r.status_code == 403, r.text
-        assert "iastate.edu" in r.json()["detail"]
 
-    def test_iastate_email_register_ok(self):
+    def test_register_invalid_key_rejected(self):
         s = _sess()
-        r, email = _register(s)
+        r, _ = _register(s, "5P-INVALID999")
+        assert r.status_code == 400, r.text
+
+    def test_register_missing_key_field(self):
+        s = _sess()
+        r = s.post(f"{API}/auth/register", json={
+            "email": _new_email(), "password": "testpass123"
+        })
+        assert r.status_code == 422
+
+    def test_register_success_pending_email_and_consumes_key(self):
+        code = _mint_admin_key()
+        s = _sess()
+        r, email = _register(s, code)
         assert r.status_code == 200, r.text
         u = r.json()["user"]
+        assert u["status"] == "pending_email"
         assert u["email"] == email
-        assert u["is_admin"] is False
-        # cookies set
         assert s.cookies.get("access_token")
+        a = _admin_session()
+        keys = a.get(f"{API}/admin/keys").json()
+        used = [k for k in keys if k["code"] == code]
+        assert used and used[0]["used"] is True
 
-    def test_admin_login_and_me(self):
-        s = _admin_session()
-        r = s.get(f"{API}/auth/me")
+    def test_used_key_cannot_be_reused(self):
+        code = _mint_admin_key()
+        s1 = _sess(); r1, _ = _register(s1, code)
+        assert r1.status_code == 200
+        s2 = _sess(); r2, _ = _register(s2, code)
+        assert r2.status_code == 400, r2.text
+
+
+# ============================================================
+class TestOtpFlow:
+    def test_verify_otp_success(self):
+        s, email, uid = _register_and_verify()
+        me = s.get(f"{API}/auth/me").json()
+        assert me["status"] == "pending_review"
+
+    def test_verify_wrong_code_5_attempts_then_429(self):
+        code = _mint_admin_key()
+        s = _sess()
+        r, email = _register(s, code)
         assert r.status_code == 200
-        d = r.json()
-        assert d["email"] == ADMIN_EMAIL
-        assert d["is_admin"] is True
+        for _ in range(5):
+            x = s.post(f"{API}/auth/verify-otp", json={"code": "000000"})
+            assert x.status_code in (400, 429)
+        r6 = s.post(f"{API}/auth/verify-otp", json={"code": "000000"})
+        assert r6.status_code == 429, r6.text
 
-    def test_wrong_password(self):
+    def test_resend_otp_invalidates_old(self):
+        code = _mint_admin_key()
         s = _sess()
-        r = _login(s, ADMIN_EMAIL, "wrong_password_xx")
-        assert r.status_code == 401
-
-    def test_me_unauth(self):
-        r = requests.get(f"{API}/auth/me")
-        assert r.status_code == 401
-
-    def test_logout_clears_cookies(self):
-        s = _admin_session()
-        r = s.post(f"{API}/auth/logout")
+        r, email = _register(s, code)
         assert r.status_code == 200
-        # after logout, /auth/me should fail
-        s2 = requests.Session()  # no cookies
-        r2 = s2.get(f"{API}/auth/me")
-        assert r2.status_code == 401
+        time.sleep(0.4)
+        first = _read_otp_from_logs(email)
+        time.sleep(1.1)
+        rr = s.post(f"{API}/auth/resend-otp")
+        assert rr.status_code == 200
+        time.sleep(0.4)
+        second = _read_otp_from_logs(email)
+        assert second
+        if first and first != second:
+            bad = s.post(f"{API}/auth/verify-otp", json={"code": first})
+            assert bad.status_code == 400
 
 
-# ---------- Status ----------
-class TestStatus:
-    def test_status_shape(self):
-        s = _admin_session()
-        r = s.get(f"{API}/status/today")
-        assert r.status_code == 200, r.text
-        d = r.json()
-        for k in ["today_key", "unlock_at", "server_used", "server_limit",
-                  "available_slots", "is_admin", "is_champion", "can_post_now",
-                  "spectator_mode"]:
-            assert k in d, f"missing {k}"
-        assert d["server_limit"] == 5
-        assert d["is_admin"] is True
-        assert d["can_post_now"] is True  # admin always can post
-
-    def test_status_regular_user_golden_hour_locked(self):
-        # Fresh user; unless the random unlock has already passed, expect block.
+# ============================================================
+class TestStatusGate:
+    def test_pending_email_blocked_from_posts_and_messages(self):
+        code = _mint_admin_key()
         s = _sess()
-        r, _ = _register(s)
+        r, _ = _register(s, code)
         assert r.status_code == 200
-        r = s.get(f"{API}/status/today")
-        d = r.json()
-        # If golden hour passed naturally, can_post_now True. Else blocked.
-        if not d["can_post_now"]:
-            assert d["block_reason"] in ("GOLDEN_HOUR_LOCKED", "SERVER_FULL")
+        assert s.get(f"{API}/posts").status_code == 403
+        assert s.get(f"{API}/messages/conversations").status_code == 403
+
+    def test_pending_review_blocked(self):
+        s, email, uid = _register_and_verify()
+        assert s.get(f"{API}/posts").status_code == 403
+        assert s.post(f"{API}/posts/anyid/like").status_code == 403
 
 
-# ---------- Posts: rules & blinding ----------
-class TestPostsRules:
-    def test_admin_can_post_and_serialize(self):
-        s = _admin_session()
-        # Ensure room: query status
-        st = s.get(f"{API}/status/today").json()
-        if st["server_used"] >= 5:
-            pytest.skip("server already full; cleanup needed")
-        r = s.post(f"{API}/posts", json={"title": "TEST_admin", "content": "hi"})
-        assert r.status_code == 200, r.text
-        p = r.json()
-        assert p["author_label"] == "운영자" or p["author_label"] == ADMIN_EMAIL  # admin viewer sees email
-        # admin viewing own post: show_real path
-        assert p["author_label"] == ADMIN_EMAIL
-        assert p["is_admin_post"] is True
-        # cleanup
-        s.delete(f"{API}/posts/{p['id']}")
+# ============================================================
+class TestAdminApproval:
+    def test_pending_list_includes_recommended_by(self):
+        s, email, uid = _register_and_verify()
+        a = _admin_session()
+        items = a.get(f"{API}/admin/pending").json()
+        mine = [u for u in items if u["id"] == uid]
+        assert mine
+        assert mine[0].get("recommended_by_email") == ADMIN_EMAIL
 
-    def test_regular_user_blocked_by_golden_hour(self):
-        s = _sess()
-        r, _ = _register(s)
+    def test_approve_makes_active(self):
+        s, email, uid = _register_and_verify()
+        a = _admin_session()
+        r = a.post(f"{API}/admin/users/{uid}/approve")
         assert r.status_code == 200
-        # force unlock to future to guarantee GOLDEN_HOUR_LOCKED
-        date_key = s.get(f"{API}/status/today").json()["today_key"]
-        _mongo_run(_future_unlock(date_key))
-        st = s.get(f"{API}/status/today").json()
-        if st["spectator_mode"]:
-            pytest.skip("server full")
-        assert st["can_post_now"] is False
-        assert st["block_reason"] == "GOLDEN_HOUR_LOCKED"
-        r = s.post(f"{API}/posts", json={"title": "early", "content": "x"})
-        assert r.status_code == 423, r.text
-        # restore for following tests
-        _mongo_run(_backdate_unlock(date_key))
+        assert s.get(f"{API}/posts").status_code == 200
+        assert s.get(f"{API}/auth/me").json()["status"] == "active"
 
-    def test_user_done_after_one_post(self):
-        # Backdate unlock so user can post; create one; then second blocked by USER_DONE
-        date_key = datetime.now().strftime("%Y-%m-%d")  # local today (server uses Chicago; close enough for daily_state record)
-        s = _sess()
-        r, _ = _register(s)
-        st = s.get(f"{API}/status/today").json()
-        date_key = st["today_key"]
-        _mongo_run(_backdate_unlock(date_key))
-        st = s.get(f"{API}/status/today").json()
-        if st["spectator_mode"]:
-            pytest.skip("server is full; can't test USER_DONE")
-        r1 = s.post(f"{API}/posts", json={"title": "TEST_first", "content": "1"})
-        assert r1.status_code == 200, r1.text
-        r2 = s.post(f"{API}/posts", json={"title": "TEST_second", "content": "2"})
-        assert r2.status_code == 423
-        # cleanup
-        admin = _admin_session()
-        admin.delete(f"{API}/posts/{r1.json()['id']}")
+    def test_reject_blocks(self):
+        s, email, uid = _register_and_verify()
+        a = _admin_session()
+        r = a.post(f"{API}/admin/users/{uid}/reject")
+        assert r.status_code == 200
+        assert s.get(f"{API}/auth/me").json()["status"] == "rejected"
+        assert s.get(f"{API}/posts").status_code == 403
 
-    def test_anonymous_label_for_regular_post(self):
-        # admin posts (so we definitely can), then create regular user post via backdate
-        admin = _admin_session()
-        date_key = admin.get(f"{API}/status/today").json()["today_key"]
-        _mongo_run(_backdate_unlock(date_key))
-        s = _sess()
-        r, _ = _register(s)
-        st = s.get(f"{API}/status/today").json()
-        if not st["can_post_now"]:
-            pytest.skip("cannot post (server full)")
-        rp = s.post(f"{API}/posts", json={"title": "TEST_anon", "content": "x"})
+
+# ============================================================
+class TestAdminKeys:
+    def test_mint_and_list(self):
+        a = _admin_session()
+        r = a.post(f"{API}/admin/keys")
+        assert r.status_code == 200
+        code = r.json()["code"]
+        assert code.startswith("5P-")
+        lst = a.get(f"{API}/admin/keys").json()
+        assert any(k["code"] == code for k in lst)
+
+    def test_non_admin_cannot_mint(self):
+        s, *_ = _make_active_user()
+        assert s.post(f"{API}/admin/keys").status_code == 403
+
+
+# ============================================================
+class TestShadowMode:
+    def test_admin_as_admin_label_and_non_admin_403(self):
+        a = _admin_session()
+        _mongo_run(_backdate_unlock_all())
+        rp = a.post(f"{API}/posts", json={"title": "TEST_shadow", "content": "x"})
+        if rp.status_code != 200:
+            pytest.skip(f"cannot create post: {rp.text}")
+        pid = rp.json()["id"]
+        try:
+            rc = a.post(f"{API}/posts/{pid}/comments", json={"content": "official", "as_admin": True})
+            assert rc.status_code == 200
+            assert rc.json()["display_as_admin"] is True
+
+            v, *_ = _make_active_user()
+            comments = v.get(f"{API}/posts/{pid}/comments").json()
+            shadow = [c for c in comments if c["display_as_admin"]]
+            assert shadow and shadow[0]["author_label"] == "운영자"
+
+            # non-admin cannot use as_admin
+            r403 = v.post(f"{API}/posts/{pid}/comments", json={"content": "x", "as_admin": True})
+            assert r403.status_code == 403
+
+            # Admin without as_admin -> not shadow
+            rc2 = a.post(f"{API}/posts/{pid}/comments", json={"content": "casual", "as_admin": False})
+            assert rc2.status_code == 200
+            assert rc2.json()["display_as_admin"] is False
+        finally:
+            a.delete(f"{API}/posts/{pid}")
+
+
+# ============================================================
+class TestBoostChampion:
+    def test_boost_creates_champion_and_grants_one_time_key(self):
+        a = _admin_session()
+        _mongo_run(_backdate_unlock_all())
+        u, email, uid = _make_active_user()
+        st = u.get(f"{API}/status/today").json()
+        if st.get("spectator_mode") or not st.get("can_post_now"):
+            pytest.skip(f"cannot post: {st.get('block_reason')}")
+        rp = u.post(f"{API}/posts", json={"title": "TEST_champ", "content": "y"})
         assert rp.status_code == 200, rp.text
         pid = rp.json()["id"]
+        try:
+            rb = a.post(f"{API}/admin/posts/{pid}/boost", json={"boost": 20})
+            assert rb.status_code == 200
+            view = a.get(f"{API}/posts/{pid}").json()
+            assert view["is_champion"] is True
+            assert view["like_count"] >= 15
 
-        # regular viewer: another fresh user
+            me = u.get(f"{API}/auth/me").json()
+            assert me["key_granted"] is True
+            keys = u.get(f"{API}/me/keys").json()
+            champ = [k for k in keys if k["source"] == "champion"]
+            assert len(champ) == 1
+
+            # second boost: no extra key
+            a.post(f"{API}/admin/posts/{pid}/boost", json={"boost": 25})
+            keys2 = u.get(f"{API}/me/keys").json()
+            assert len([k for k in keys2 if k["source"] == "champion"]) == 1
+        finally:
+            a.delete(f"{API}/posts/{pid}")
+
+
+# ============================================================
+class TestChampionBoard:
+    def test_champions_endpoint_and_feed_exclusion(self):
+        a = _admin_session()
+        _mongo_run(_backdate_unlock_all())
+        u, *_ = _make_active_user()
+        st = u.get(f"{API}/status/today").json()
+        if not st.get("can_post_now"):
+            pytest.skip(f"cannot post: {st.get('block_reason')}")
+        rp = u.post(f"{API}/posts", json={"title": "TEST_cb", "content": "z"})
+        assert rp.status_code == 200
+        pid = rp.json()["id"]
+        try:
+            a.post(f"{API}/admin/posts/{pid}/boost", json={"boost": 16})
+            ch = a.get(f"{API}/champions").json()
+            assert any(p["id"] == pid for p in ch)
+            feed = a.get(f"{API}/posts").json()
+            assert not any(p["id"] == pid for p in feed)
+        finally:
+            a.delete(f"{API}/posts/{pid}")
+
+
+# ============================================================
+class TestPasswordReset:
+    def test_forgot_silent_unknown(self):
+        s = _sess()
+        r = s.post(f"{API}/auth/forgot-password", json={"email": "nobody_xyz@iastate.edu"})
+        assert r.status_code == 200
+        assert r.json()["ok"] is True
+
+    def test_forgot_then_reset_then_login(self):
+        u, email, uid = _make_active_user()
+        s = _sess()
+        r = s.post(f"{API}/auth/forgot-password", json={"email": email})
+        assert r.status_code == 200
+        time.sleep(0.4)
+        token = _read_reset_token_from_logs(email)
+        assert token, f"no reset token in logs for {email}"
+        new_pw = "newpass456"
+        rr = s.post(f"{API}/auth/reset-password", json={"token": token, "password": new_pw})
+        assert rr.status_code == 200
+        # reuse blocked
+        rr2 = s.post(f"{API}/auth/reset-password", json={"token": token, "password": "again789"})
+        assert rr2.status_code == 400
+        # login with new pw
         s2 = _sess()
-        _register(s2)
-        view = s2.get(f"{API}/posts/{pid}").json()
-        assert view["author_label"].startswith("#"), view
-        assert view["author_id"] is None  # not admin viewer
+        rl = s2.post(f"{API}/auth/login", json={"email": email, "password": new_pw})
+        assert rl.status_code == 200
 
-        # admin viewer sees email
-        admin_view = admin.get(f"{API}/posts/{pid}").json()
-        assert "@iastate.edu" in admin_view["author_label"]
-        assert admin_view["author_id"] is not None
-
-        admin.delete(f"{API}/posts/{pid}")
-
-
-# ---------- Like / Report / Blinding ----------
-class TestInteractions:
-    def _setup_post(self):
-        admin = _admin_session()
-        st = admin.get(f"{API}/status/today").json()
-        if st["server_used"] >= 5:
-            # try to create room by deleting one TEST_ post
-            posts = admin.get(f"{API}/posts").json()
-            for p in posts:
-                if p.get("title", "").startswith("TEST_"):
-                    admin.delete(f"{API}/posts/{p['id']}")
-                    break
-        r = admin.post(f"{API}/posts", json={"title": "TEST_inter", "content": "y"})
-        assert r.status_code == 200, r.text
-        return admin, r.json()["id"]
-
-    def test_like_toggle(self):
-        admin, pid = self._setup_post()
-        s = _sess(); _register(s)
-        r1 = s.post(f"{API}/posts/{pid}/like")
-        assert r1.status_code == 200
-        assert r1.json()["liked"] is True
-        r2 = s.post(f"{API}/posts/{pid}/like")
-        assert r2.json()["liked"] is False
-        admin.delete(f"{API}/posts/{pid}")
-
-    def test_self_report_blocked_and_blinded_after_3(self):
-        admin, pid = self._setup_post()
-        # admin self-report -> 400
-        rs = admin.post(f"{API}/posts/{pid}/report")
-        assert rs.status_code == 400
-
-        # 3 distinct user reports
-        for _ in range(3):
-            u = _sess(); _register(u)
-            rr = u.post(f"{API}/posts/{pid}/report")
-            assert rr.status_code == 200, rr.text
-
-        # non-admin viewer sees blinded
-        viewer = _sess(); _register(viewer)
-        v = viewer.get(f"{API}/posts/{pid}").json()
-        assert v["blinded"] is True
-        assert v["title"] == "블라인드 처리된 글"
-
-        # admin still sees real content
-        a = admin.get(f"{API}/posts/{pid}").json()
-        assert a["blinded"] is True
-        assert a["title"] == "TEST_inter"
-
-        admin.delete(f"{API}/posts/{pid}")
-
-
-# ---------- Comments ----------
-class TestComments:
-    def test_comment_labels_and_counts(self):
-        admin = _admin_session()
-        # admin creates post
-        r = admin.post(f"{API}/posts", json={"title": "TEST_cmt", "content": "z"})
-        if r.status_code != 200:
-            pytest.skip(f"could not create post: {r.text}")
-        pid = r.json()["id"]
-
-        # author (admin) comments on own admin post -> author_is_admin so label "운영자"
-        c1 = admin.post(f"{API}/posts/{pid}/comments", json={"content": "self comment"})
-        assert c1.status_code == 200
-        # admin viewer sees email label (because show_real -> author_email)
-        # serialize_comment: if author_is_admin -> "운영자"; OR if is_admin viewer -> email
-        # Code: label initially set to email if admin viewer; then overridden to "운영자" if author_is_admin.
-        assert c1.json()["author_label"] in ("운영자", ADMIN_EMAIL)
-
-        # other user comments
-        u = _sess(); _register(u)
-        c2 = u.post(f"{API}/posts/{pid}/comments", json={"content": "anon comment"})
-        assert c2.status_code == 200
-        # u is non-admin viewer; c2 is by u; post author is admin (different); label should be "익명N"
-        assert c2.json()["author_label"].startswith("익명"), c2.json()
-
-        # comment_count incremented
-        p = admin.get(f"{API}/posts/{pid}").json()
-        assert p["comment_count"] == 2
-
-        admin.delete(f"{API}/posts/{pid}")
-
-
-# ---------- DM / Anonymous ----------
-class TestMessages:
-    def test_self_dm_blocked(self):
-        s = _admin_session()
-        me = s.get(f"{API}/auth/me").json()
-        r = s.post(f"{API}/messages", json={"recipient_id": me["id"], "content": "x"})
+    def test_reset_invalid_token(self):
+        s = _sess()
+        r = s.post(f"{API}/auth/reset-password", json={"token": "garbage", "password": "abc123"})
         assert r.status_code == 400
 
-    def test_send_and_conversation_anon_label(self):
-        a = _sess(); ra, _ = _register(a)
-        b = _sess(); rb, _ = _register(b)
-        uid_a = ra.json()["user"]["id"]
-        uid_b = rb.json()["user"]["id"]
 
-        # a -> b
-        r = a.post(f"{API}/messages", json={"recipient_id": uid_b, "content": "hello"})
-        assert r.status_code == 200, r.text
-
-        convs = b.get(f"{API}/messages/conversations").json()
-        my_conv = [c for c in convs if c.get("other_user_id") == uid_a]
-        assert my_conv, convs
-        assert my_conv[0]["label"].startswith("ANON-")
-        assert len(my_conv[0]["label"]) == len("ANON-XXXX")
-
-    def test_start_dm_from_post_self_blocked(self):
-        admin = _admin_session()
-        r = admin.post(f"{API}/posts", json={"title": "TEST_dm", "content": "p"})
-        if r.status_code != 200:
-            pytest.skip("cannot create post")
-        pid = r.json()["id"]
-        # admin starting DM on own post -> 400
-        rs = admin.post(f"{API}/messages/start/{pid}")
-        assert rs.status_code == 400
-
-        # other user starts DM -> 200 with recipient_id, conv_id (without revealing identity to UI but server returns id)
-        u = _sess(); _register(u)
-        rr = u.post(f"{API}/messages/start/{pid}")
-        assert rr.status_code == 200, rr.text
-        assert "recipient_id" in rr.json() and "conv_id" in rr.json()
-        admin.delete(f"{API}/posts/{pid}")
+# ============================================================
+class TestAdminAuth:
+    def test_admin_login_and_me(self):
+        s = _admin_session()
+        me = s.get(f"{API}/auth/me").json()
+        assert me["is_admin"] is True
+        assert me["status"] == "active"

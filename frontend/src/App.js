@@ -4,27 +4,68 @@ import { AuthProvider, useAuth } from "@/context/AuthContext";
 import Gate from "@/pages/Gate";
 import Login from "@/pages/Login";
 import Register from "@/pages/Register";
+import VerifyEmail from "@/pages/VerifyEmail";
+import PendingReview from "@/pages/PendingReview";
+import Rejected from "@/pages/Rejected";
+import ForgotPassword from "@/pages/ForgotPassword";
+import ResetPassword from "@/pages/ResetPassword";
 import Feed from "@/pages/Feed";
 import PostDetail from "@/pages/PostDetail";
 import NewPost from "@/pages/NewPost";
 import Messages from "@/pages/Messages";
 import Profile from "@/pages/Profile";
+import ChampionBoard from "@/pages/ChampionBoard";
+import Admin from "@/pages/Admin";
 import AppShell from "@/components/AppShell";
 import { Toaster } from "@/components/ui/sonner";
 
-function Protected({ children }) {
+function Loading() {
+  return (
+    <div className="min-h-screen flex items-center justify-center text-[var(--text-mute)] fp-mono text-xs uppercase tracking-[0.4em]">
+      Loading.
+    </div>
+  );
+}
+
+function StatusGate({ children }) {
   const { user, loading } = useAuth();
-  if (loading || user === null) {
-    return <div className="min-h-screen flex items-center justify-center text-[var(--text-dim)] fp-mono text-xs uppercase tracking-[0.4em]">Loading.</div>;
-  }
+  if (loading || user === null) return <Loading />;
   if (!user) return <Navigate to="/" replace />;
+  if (user.status === "pending_email") return <Navigate to="/verify" replace />;
+  if (user.status === "pending_review") return <Navigate to="/pending" replace />;
+  if (user.status === "rejected") return <Navigate to="/rejected" replace />;
+  return children;
+}
+
+function StageOnly({ stage, children }) {
+  const { user, loading } = useAuth();
+  if (loading || user === null) return <Loading />;
+  if (!user) return <Navigate to="/" replace />;
+  if (user.status !== stage) {
+    if (user.status === "active") return <Navigate to="/feed" replace />;
+    if (user.status === "pending_email") return <Navigate to="/verify" replace />;
+    if (user.status === "pending_review") return <Navigate to="/pending" replace />;
+    if (user.status === "rejected") return <Navigate to="/rejected" replace />;
+  }
   return children;
 }
 
 function PublicOnly({ children }) {
   const { user, loading } = useAuth();
   if (loading || user === null) return null;
-  if (user) return <Navigate to="/feed" replace />;
+  if (user) {
+    if (user.status === "pending_email") return <Navigate to="/verify" replace />;
+    if (user.status === "pending_review") return <Navigate to="/pending" replace />;
+    if (user.status === "rejected") return <Navigate to="/rejected" replace />;
+    return <Navigate to="/feed" replace />;
+  }
+  return children;
+}
+
+function AdminOnly({ children }) {
+  const { user, loading } = useAuth();
+  if (loading || user === null) return <Loading />;
+  if (!user || !user.is_admin) return <Navigate to="/feed" replace />;
   return children;
 }
 
@@ -37,14 +78,22 @@ export default function App() {
             <Route path="/" element={<PublicOnly><Gate /></PublicOnly>} />
             <Route path="/login" element={<PublicOnly><Login /></PublicOnly>} />
             <Route path="/register" element={<PublicOnly><Register /></PublicOnly>} />
+            <Route path="/forgot" element={<PublicOnly><ForgotPassword /></PublicOnly>} />
+            <Route path="/reset/:token" element={<PublicOnly><ResetPassword /></PublicOnly>} />
 
-            <Route element={<Protected><AppShell /></Protected>}>
+            <Route path="/verify" element={<StageOnly stage="pending_email"><VerifyEmail /></StageOnly>} />
+            <Route path="/pending" element={<StageOnly stage="pending_review"><PendingReview /></StageOnly>} />
+            <Route path="/rejected" element={<StageOnly stage="rejected"><Rejected /></StageOnly>} />
+
+            <Route element={<StatusGate><AppShell /></StatusGate>}>
               <Route path="/feed" element={<Feed />} />
+              <Route path="/champions" element={<ChampionBoard />} />
               <Route path="/post/new" element={<NewPost />} />
               <Route path="/post/:id" element={<PostDetail />} />
               <Route path="/messages" element={<Messages />} />
               <Route path="/messages/:convId" element={<Messages />} />
               <Route path="/profile" element={<Profile />} />
+              <Route path="/admin" element={<AdminOnly><Admin /></AdminOnly>} />
             </Route>
 
             <Route path="*" element={<Navigate to="/" replace />} />

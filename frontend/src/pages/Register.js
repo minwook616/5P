@@ -9,6 +9,7 @@ export default function Register() {
   const navigate = useNavigate();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [code, setCode] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
@@ -17,8 +18,9 @@ export default function Register() {
     setError("");
     setLoading(true);
     try {
-      await register({ email, password });
-      navigate("/feed");
+      await register({ email, password, recommendation_code: code.trim().toUpperCase() });
+      toast.success("Verification code sent.");
+      navigate("/verify");
     } catch (err) {
       const m = formatApiError(err.response?.data?.detail) || err.message;
       setError(m);
@@ -35,13 +37,27 @@ export default function Register() {
           ← Back
         </Link>
         <div className="mt-12">
-          <div className="font-bold text-3xl tracking-tight">Become<span className="text-[var(--red)]">.</span></div>
+          <div className="font-bold text-3xl tracking-tight">Initiation<span className="text-[var(--red)]">.</span></div>
           <div className="mt-2 text-xs uppercase tracking-[0.25em] fp-mono text-[var(--text-mute)]">
-            @iastate.edu only · 1 post / day · Total 5 / day
+            Recommendation key required · @iastate.edu only
           </div>
         </div>
 
         <form onSubmit={submit} className="mt-10 space-y-6">
+          <div>
+            <label className="block text-[10px] uppercase tracking-[0.3em] fp-mono text-[var(--text-mute)] mb-2">Recommendation Key</label>
+            <input
+              className="fp-input fp-mono uppercase tracking-[0.2em]"
+              placeholder="5P-XXXXXXXX"
+              value={code}
+              onChange={(e)=>setCode(e.target.value)}
+              required
+              data-testid="register-key-input"
+            />
+            <div className="mt-2 text-[10px] fp-mono uppercase tracking-[0.2em] text-[var(--text-mute)]">
+              Ask a champion. They have one. Once.
+            </div>
+          </div>
           <div>
             <label className="block text-[10px] uppercase tracking-[0.3em] fp-mono text-[var(--text-mute)] mb-2">School Email</label>
             <input
@@ -69,7 +85,7 @@ export default function Register() {
           </div>
           {error && <div className="text-xs text-[var(--red)] fp-mono" data-testid="register-error">{error}</div>}
           <button type="submit" disabled={loading} className="fp-btn fp-btn-solid w-full" data-testid="register-submit-btn">
-            {loading ? "..." : "Enter"}
+            {loading ? "..." : "Apply"}
           </button>
         </form>
 

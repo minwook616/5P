@@ -18,9 +18,7 @@ export function AuthProvider({ children }) {
     }
   }, []);
 
-  useEffect(() => {
-    checkSession();
-  }, [checkSession]);
+  useEffect(() => { checkSession(); }, [checkSession]);
 
   const login = async (email, password) => {
     const { data } = await api.post("/auth/login", { email, password });
@@ -34,17 +32,21 @@ export function AuthProvider({ children }) {
     return data.user;
   };
 
+  const verifyOtp = async (code) => {
+    const { data } = await api.post("/auth/verify-otp", { code });
+    setUser(data);
+    return data;
+  };
+
+  const resendOtp = async () => api.post("/auth/resend-otp");
+
   const logout = async () => {
-    try {
-      await api.post("/auth/logout");
-    } catch {
-      /* ignore */
-    }
+    try { await api.post("/auth/logout"); } catch { /* ignore */ }
     setUser(false);
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, register, logout, refresh: checkSession }}>
+    <AuthContext.Provider value={{ user, loading, login, register, logout, verifyOtp, resendOtp, refresh: checkSession }}>
       {children}
     </AuthContext.Provider>
   );
