@@ -1,0 +1,44 @@
+{
+  "summary": "Iteration 4 (dual gateway + genealogy) backend & frontend testing complete. Backend: 21/21 pytest cases pass covering ISU register + OTP→ACTIVE, Invite register + pending_review (no OTP), invite_logs, admin pending recommender_stats, admin user-detail with recommender + invitees + stats, invite-log endpoint, status gating, Resend key non-exposure. Frontend: dual-gateway tabs swap fields correctly, ISU register → /verify, admin /admin shows 3 tabs (Initiation, Keys, Invite Log) with gate badges, recommender nickname, recommender stats. Detail modal opens with full genealogy (recommender + invitees + stats grid + Approve/Reject/Close). Mint key works.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "/api/auth/register/isu", "issue": "Sets auth cookies before OTP verification; necessary for /verify-otp to authenticate but means an unverified user is implicitly signed in. require_active still blocks all sensitive routes — acceptable."},
+      {"endpoint": "/api/auth/register/invite", "issue": "Same cookie-on-register pattern; user is signed in but blocked by require_active until admin approves."},
+      {"endpoint": "logging", "issue": "OTP and password reset tokens are still logged at INFO level in plaintext (logger.info 'OTP for ...'). Convenient for testing; gate behind APP_ENV before production."},
+      {"endpoint": "CORS", "issue": "CORS_ORIGINS default '*' with allow_credentials=True is invalid per CORS spec; pin to REACT_APP_BACKEND_URL origin."},
+      {"endpoint": "/api/admin/pending", "issue": "recommended_by_nickname falls back to email split — fine, but if recommender doc is missing it sets None for email (safe); inline N+1 lookup to users + 2 counts per pending row — acceptable for low volume."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/backend_test.py",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "server.py is now ~1090 lines (was 970). Strongly recommend splitting into routers (auth_isu, auth_invite, admin_genealogy, posts, comments, messages) before iteration 5 — past 700-line guideline.",
+    "_log_invite is called from BOTH register_invite (Gate B) AND verify_otp (Gate A on activation). Good. But if OTP verify is retried after success it would be blocked by status check (only pending_email allowed) — safe.",
+    "consume_recommendation_code uses find_one then conditional update_one — race-safe, but does not assert update_one.modified_count==1; defensive check would catch lost-race silently consumed key.",
+    "admin_user_detail iterates `async for p in db.posts.find(...)` to sum likes — for a heavy author this is N posts in memory; aggregate pipeline ($sum likes_size + boost_likes) would scale better.",
+    "Resend API key: confirmed not present in any tested API response or rendered HTML. .env contains RESEND_API_KEY server-side only — good identity protection.",
+    "send_otp / send_admin_decision still awaited inline; if Resend hangs, request hangs. Wrap in asyncio.create_task with logging.",
+    "/api/admin/users/{uid}/reject still allows rejecting a pending_email (pre-OTP) user; UX OK but consider explicit confirmation in admin UI.",
+    "No rate limit on /api/auth/register/isu or /register/invite — potential abuse (mass-pending entries from a single key abuser is bounded by used:true; mass ISU-domain registrations are not). Add IP throttle.",
+    "test_credentials.md is outdated (still references the removed /api/auth/register endpoint and old flow). Should be updated to mention /register/isu and /register/invite."
+  ],
+  "updated_files": [
+    "/app/backend/tests/backend_test.py"
+  ],
+  "success_rate": {"backend": "100% (21/21)", "frontend": "100% smoke (dual-gateway tabs, ISU register→/verify, 3 admin tabs, detail modal with genealogy, mint key)"},
+  "test_credentials": "Admin: admin@iastate.edu / admin123 (auto-seeded, gate=isu, founder key auto-minted). Test ISU users: random test_<hex>@iastate.edu created via /api/auth/register/isu and OTP scraped from /var/log/supervisor/backend.err.log. Test Invite users: ext_<hex>@gmail.com via /api/auth/register/invite with admin-minted recommendation_code.",
+  "seed_data_creation": "Tests created ~14 pending users (mix of ISU pre-OTP and Invite pending_review) and ~34 recommendation keys. Admin currently has many pending entries visible in /admin UI. No teardown; test-prefixed accounts only.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Backend tests live at /app/backend/tests/backend_test.py. Helpers: _register_isu_and_verify(), _register_invite(code), _mint_admin_key(), _read_otp_from_logs(email), _backdate_unlock_all(). Tests rely on logger.info OTP lines — if those move behind APP_ENV gate, update _read_otp_from_logs. Frontend data-testids confirmed on Register: gateway-tabs/tab-isu/tab-invite/invite-key-section/register-key-input/register-email-input/register-password-input/register-submit-btn/register-error. Admin: tab-pending/tab-keys/tab-logs/pending-{uid}/detail-{uid}/approve-{uid}/reject-{uid}/detail-modal/modal-approve/modal-reject/modal-close/detail-recommender/invite-log-{id}/keys-list/key-{code}/mint-key-btn. Did NOT test the actual modal-approve click-to-API integration in iter 4 (covered by API test test_approve_makes_active in iter 3 + admin pending API in iter 4).",
+  "rca of the issue": "N/A — no failing tests."
+}

@@ -106,11 +106,17 @@ def public_user(u: dict) -> dict:
     return {
         "id": u["id"],
         "email": u["email"],
+        "nickname": u.get("nickname") or u["email"].split("@")[0],
+        "gate": u.get("gate", "invite"),
         "is_admin": u.get("is_admin", False),
         "status": u.get("status", "active"),
         "key_granted": u.get("key_granted", False),
         "created_at": u["created_at"],
     }
+
+
+def derive_nickname(email: str) -> str:
+    return email.split("@")[0][:24]
 
 
 def hash_otp(code: str) -> str:
@@ -168,8 +174,13 @@ def anon_handle(user_id: str, conv_id: str) -> str:
 
 
 # ---------------- Models ----------------
-class RegisterIn(BaseModel):
-    email: EmailStr
+class RegisterIsuIn(BaseModel):
+    email: EmailStr  # must be @iastate.edu
+    password: str = Field(min_length=6, max_length=128)
+
+
+class RegisterInviteIn(BaseModel):
+    email: EmailStr  # any domain
     password: str = Field(min_length=6, max_length=128)
     recommendation_code: str = Field(min_length=4, max_length=40)
 
@@ -250,33 +261,7 @@ async def mint_key(owner_id: str, source: str = "champion") -> dict:
 
 
 # ---------------- Auth Endpoints ----------------
-@api.post("/auth/register")
-async def register(body: RegisterIn, response: Response):
-    email = body.email.lower().strip()
-    if not email_allowed(email):
-        raise HTTPException(403, f"@{ALLOWED_DOMAIN} 이메일만 가입할 수 있습니다.")
-    if await db.users.find_one({"email": email}):
-        raise HTTPException(400, "이미 가입된 이메일입니다.")
-
-    # validate + consume key
-    uid = str(uuid.uuid4())
-    key = await consume_recommendation_code(body.recommendation_code, uid)
-
-    doc = {
-        "id": uid,
-        "email": email,
-        "password_hash": hash_password(body.password),
-        "is_admin": False,
-        "status": "pending_email",
-        "email_verified_at": None,
-        "key_granted": False,
-        "recommended_by": key["owner_id"],
-        "created_at": now_utc().isoformat(),
-        "reviewed_at": None,
-    }
-    await db.users.insert_one(doc)
-
-    # send OTP
+async def _issue_otp(uid: str, email: str):
     code = gen_otp()
     await db.email_otps.delete_many({"user_id": uid})
     await db.email_otps.insert_one({
@@ -288,6 +273,68 @@ async def register(body: RegisterIn, response: Response):
     })
     await send_otp(email, code)
     logger.info(f"OTP for {email} (dev): {code}")
+
+
+async def _log_invite(invited: dict, recommender: Optional[dict], gate: str):
+    await db.invite_logs.insert_one({
+        "id": str(uuid.uuid4()),
+        "invited_user_id": invited["id"],
+        "invited_email": invited["email"],
+        "invited_nickname": invited.get("nickname"),
+        "gate": gate,
+        "recommender_id": recommender["id"] if recommender else None,
+        "recommender_email": recommender["email"] if recommender else None,
+        "recommender_nickname": recommender.get("nickname") if recommender else None,
+        "joined_at": now_utc().isoformat(),
+    })
+
+
+@api.post("/auth/register/isu")
+async def register_isu(body: RegisterIsuIn, response: Response):
+    """Gate A — ISU email only, OTP verification, auto-active after OTP."""
+    email = body.email.lower().strip()
+    if not email_allowed(email):
+        raise HTTPException(403, f"@{ALLOWED_DOMAIN} 이메일만 ISU 게이트로 가입할 수 있습니다. 일반 이메일은 초대장(추천 키) 게이트를 이용해주세요.")
+    if await db.users.find_one({"email": email}):
+        raise HTTPException(400, "이미 가입된 이메일입니다.")
+
+    uid = str(uuid.uuid4())
+    doc = {
+        "id": uid, "email": email, "nickname": derive_nickname(email),
+        "password_hash": hash_password(body.password),
+        "is_admin": False, "gate": "isu",
+        "status": "pending_email", "email_verified_at": None,
+        "key_granted": False, "recommended_by": None,
+        "created_at": now_utc().isoformat(), "reviewed_at": None,
+    }
+    await db.users.insert_one(doc)
+    await _issue_otp(uid, email)
+
+    set_auth_cookies(response, create_access_token(uid, email), create_refresh_token(uid))
+    return {"user": public_user(doc)}
+
+
+@api.post("/auth/register/invite")
+async def register_invite(body: RegisterInviteIn, response: Response):
+    """Gate B — Any email + recommendation key required. Skips OTP, goes to admin review."""
+    email = body.email.lower().strip()
+    if await db.users.find_one({"email": email}):
+        raise HTTPException(400, "이미 가입된 이메일입니다.")
+
+    uid = str(uuid.uuid4())
+    key = await consume_recommendation_code(body.recommendation_code, uid)
+    recommender = await db.users.find_one({"id": key["owner_id"]}, {"_id": 0})
+
+    doc = {
+        "id": uid, "email": email, "nickname": derive_nickname(email),
+        "password_hash": hash_password(body.password),
+        "is_admin": False, "gate": "invite",
+        "status": "pending_review", "email_verified_at": None,
+        "key_granted": False, "recommended_by": key["owner_id"],
+        "created_at": now_utc().isoformat(), "reviewed_at": None,
+    }
+    await db.users.insert_one(doc)
+    await _log_invite(doc, recommender, gate="invite")
 
     set_auth_cookies(response, create_access_token(uid, email), create_refresh_token(uid))
     return {"user": public_user(doc)}
@@ -310,11 +357,16 @@ async def verify_otp(body: VerifyOtpIn, user: dict = Depends(get_current_user)):
         raise HTTPException(400, "코드가 일치하지 않습니다.")
 
     await db.email_otps.delete_many({"user_id": user["id"]})
+    # ISU gate auto-activates; invite gate requires admin review (but invite gate doesn't use OTP path)
+    new_status = "active" if user.get("gate") == "isu" else "pending_review"
     await db.users.update_one(
         {"id": user["id"]},
-        {"$set": {"status": "pending_review", "email_verified_at": now_utc().isoformat()}},
+        {"$set": {"status": new_status, "email_verified_at": now_utc().isoformat(),
+                  "reviewed_at": now_utc().isoformat() if new_status == "active" else None}},
     )
     fresh = await db.users.find_one({"id": user["id"]}, {"_id": 0})
+    if new_status == "active" and user.get("gate") == "isu":
+        await _log_invite(fresh, None, gate="isu")
     return public_user(fresh)
 
 
@@ -837,19 +889,6 @@ async def my_keys(user: dict = Depends(get_current_user)):
 
 
 # ---------------- Admin Endpoints ----------------
-@api.get("/admin/pending")
-async def admin_pending(_: dict = Depends(require_admin)):
-    cursor = db.users.find({"status": "pending_review"}, {"_id": 0, "password_hash": 0}).sort("created_at", 1)
-    items = await cursor.to_list(200)
-    # attach recommender email
-    for u in items:
-        rid = u.get("recommended_by")
-        if rid:
-            r = await db.users.find_one({"id": rid}, {"_id": 0, "email": 1})
-            u["recommended_by_email"] = r["email"] if r else None
-    return items
-
-
 @api.post("/admin/users/{uid}/approve")
 async def admin_approve(uid: str, _: dict = Depends(require_admin)):
     u = await db.users.find_one({"id": uid}, {"_id": 0})
@@ -862,6 +901,81 @@ async def admin_approve(uid: str, _: dict = Depends(require_admin)):
     )
     await send_admin_decision(u["email"], approved=True)
     return {"ok": True}
+
+
+@api.get("/admin/pending")
+async def admin_pending_v2(_: dict = Depends(require_admin)):
+    cursor = db.users.find({"status": "pending_review"}, {"_id": 0, "password_hash": 0}).sort("created_at", 1)
+    items = await cursor.to_list(200)
+    for u in items:
+        rid = u.get("recommended_by")
+        if rid:
+            r = await db.users.find_one({"id": rid}, {"_id": 0, "email": 1, "nickname": 1})
+            u["recommended_by_email"] = r["email"] if r else None
+            u["recommended_by_nickname"] = (r.get("nickname") if r else None) or (r["email"].split("@")[0] if r else None)
+            # recommender quick stats
+            posts_n = await db.posts.count_documents({"author_id": rid})
+            invites_n = await db.invite_logs.count_documents({"recommender_id": rid})
+            u["recommender_stats"] = {"posts": posts_n, "invites": invites_n}
+    return items
+
+
+@api.get("/admin/users/{uid}")
+async def admin_user_detail(uid: str, _: dict = Depends(require_admin)):
+    u = await db.users.find_one({"id": uid}, {"_id": 0, "password_hash": 0})
+    if not u:
+        raise HTTPException(404, "사용자를 찾을 수 없습니다.")
+    # recommender chain (1-level up)
+    recommender = None
+    if u.get("recommended_by"):
+        r = await db.users.find_one({"id": u["recommended_by"]}, {"_id": 0, "password_hash": 0})
+        if r:
+            recommender = {
+                "id": r["id"], "email": r["email"],
+                "nickname": r.get("nickname") or derive_nickname(r["email"]),
+                "is_admin": r.get("is_admin", False),
+                "gate": r.get("gate", "invite"),
+                "status": r.get("status", "active"),
+                "created_at": r["created_at"],
+            }
+    # invitees by this user (genealogy down 1 level)
+    inv_cursor = db.invite_logs.find({"recommender_id": uid}, {"_id": 0}).sort("joined_at", 1)
+    invitees = await inv_cursor.to_list(500)
+    # recommender activity stats for solidarity check
+    posts_authored = await db.posts.count_documents({"author_id": uid})
+    likes_received = 0
+    async for p in db.posts.find({"author_id": uid}, {"_id": 0, "likes": 1, "boost_likes": 1}):
+        likes_received += len(p.get("likes", [])) + int(p.get("boost_likes", 0) or 0)
+    keys_owned = await db.recommendation_keys.count_documents({"owner_id": uid})
+    keys_used = await db.recommendation_keys.count_documents({"owner_id": uid, "used": True})
+    return {
+        "user": {
+            "id": u["id"], "email": u["email"],
+            "nickname": u.get("nickname") or derive_nickname(u["email"]),
+            "gate": u.get("gate", "invite"),
+            "is_admin": u.get("is_admin", False),
+            "status": u.get("status", "active"),
+            "key_granted": u.get("key_granted", False),
+            "email_verified_at": u.get("email_verified_at"),
+            "reviewed_at": u.get("reviewed_at"),
+            "created_at": u["created_at"],
+        },
+        "recommender": recommender,
+        "invitees": invitees,
+        "stats": {
+            "posts": posts_authored,
+            "likes_received": likes_received,
+            "keys_owned": keys_owned,
+            "keys_used": keys_used,
+            "invites_count": len(invitees),
+        },
+    }
+
+
+@api.get("/admin/invite-log")
+async def admin_invite_log(_: dict = Depends(require_admin)):
+    cursor = db.invite_logs.find({}, {"_id": 0}).sort("joined_at", -1).limit(500)
+    return await cursor.to_list(500)
 
 
 @api.post("/admin/users/{uid}/reject")
@@ -919,6 +1033,8 @@ async def startup():
     await db.recommendation_keys.create_index("owner_id")
     await db.email_otps.create_index("user_id")
     await db.password_resets.create_index("token", unique=True)
+    await db.invite_logs.create_index("recommender_id")
+    await db.invite_logs.create_index("invited_user_id")
 
     pw = os.environ.get("ADMIN_PASSWORD", "admin123")
     existing = await db.users.find_one({"email": ADMIN_EMAIL})
@@ -926,12 +1042,12 @@ async def startup():
         admin_id = str(uuid.uuid4())
         await db.users.insert_one({
             "id": admin_id, "email": ADMIN_EMAIL,
+            "nickname": "운영자",
             "password_hash": hash_password(pw),
-            "is_admin": True, "status": "active",
+            "is_admin": True, "gate": "isu", "status": "active",
             "key_granted": True, "email_verified_at": now_utc().isoformat(),
             "created_at": now_utc().isoformat(),
         })
-        # Founder key
         await mint_key(admin_id, source="founder")
         logger.info("Admin seeded with founder key")
     else:
@@ -940,11 +1056,14 @@ async def startup():
             update["is_admin"] = True
         if existing.get("status") != "active":
             update["status"] = "active"
+        if not existing.get("nickname"):
+            update["nickname"] = "운영자"
+        if not existing.get("gate"):
+            update["gate"] = "isu"
         if not verify_password(pw, existing["password_hash"]):
             update["password_hash"] = hash_password(pw)
         if update:
             await db.users.update_one({"email": ADMIN_EMAIL}, {"$set": update})
-        # ensure admin has at least one key
         any_key = await db.recommendation_keys.find_one({"owner_id": existing["id"], "used": False}, {"_id": 0})
         if not any_key:
             await mint_key(existing["id"], source="founder")

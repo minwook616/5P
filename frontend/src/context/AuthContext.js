@@ -26,8 +26,14 @@ export function AuthProvider({ children }) {
     return data.user;
   };
 
-  const register = async (payload) => {
-    const { data } = await api.post("/auth/register", payload);
+  const registerIsu = async (payload) => {
+    const { data } = await api.post("/auth/register/isu", payload);
+    setUser(data.user);
+    return data.user;
+  };
+
+  const registerInvite = async (payload) => {
+    const { data } = await api.post("/auth/register/invite", payload);
     setUser(data.user);
     return data.user;
   };
@@ -46,7 +52,7 @@ export function AuthProvider({ children }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, register, logout, verifyOtp, resendOtp, refresh: checkSession }}>
+    <AuthContext.Provider value={{ user, loading, login, registerIsu, registerInvite, logout, verifyOtp, resendOtp, refresh: checkSession }}>
       {children}
     </AuthContext.Provider>
   );
