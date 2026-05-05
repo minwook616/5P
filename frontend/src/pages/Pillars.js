@@ -62,7 +62,7 @@ export default function Pillars() {
               data-testid={`pillar-${p.id}`}
             >
               <div className="absolute top-0 left-0 w-1 h-full" style={{background: "linear-gradient(180deg, #D4AF37, #C8102E)"}}/>
-              <div className="flex items-center gap-3 text-[10px] uppercase tracking-[0.3em] fp-mono mb-3" style={{color: "#D4AF37"}}>
+              <div className="flex items-center gap-3 text-[13px] uppercase tracking-[0.3em] fp-mono mb-3" style={{color: "#D4AF37"}}>
                 <span>★ Pillar</span>
                 <span className="text-[var(--text-mute)]">·</span>
                 <span className="text-[var(--text-mute)]">{p.is_admin_post ? <span className="text-[var(--red)]">{p.author_label}</span> : p.author_label}</span>
@@ -73,7 +73,7 @@ export default function Pillars() {
               <h3 className="text-2xl font-bold tracking-tight mb-2 text-[var(--text)]">{p.title}</h3>
               <p className="text-sm text-[var(--text-dim)] line-clamp-2 leading-relaxed">{p.content}</p>
               {user?.is_admin && p.boost_likes > 0 && (
-                <div className="mt-3 text-[10px] fp-mono uppercase tracking-[0.3em] text-[var(--red)]">
+                <div className="mt-3 text-[13px] fp-mono uppercase tracking-[0.3em] text-[var(--red)]">
                   Admin boost: +{p.boost_likes} (real {p.real_like_count})
                 </div>
               )}

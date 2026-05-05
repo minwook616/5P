@@ -159,7 +159,7 @@ export default function Admin() {
     <div className="space-y-8">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
-          <div className="text-[10px] uppercase tracking-[0.4em] fp-mono text-[var(--red)]">Admin</div>
+          <div className="text-[13px] uppercase tracking-[0.4em] fp-mono text-[var(--red)]">Admin</div>
           <h1 className="mt-2 text-3xl font-bold tracking-tighter">Control<span className="text-[var(--red)]">.</span></h1>
         </div>
         <button onClick={mintKey} className="fp-btn fp-btn-red" data-testid="mint-key-btn">
@@ -242,7 +242,7 @@ export default function Admin() {
                         </span>
                       ))}
                     </div>
-                    <div className="text-[10px] fp-mono uppercase tracking-[0.25em] text-[var(--text-mute)] mt-1">
+                    <div className="text-[13px] fp-mono uppercase tracking-[0.25em] text-gray-300 mt-1">
                       추천인: <span className="text-[var(--text-dim)]">{u.recommended_by_nickname || "—"}</span>
                       {u.recommender_stats && (
                         <span className="ml-3">
@@ -252,7 +252,7 @@ export default function Admin() {
                       )}
                     </div>
                     {u.email_verified_at && (
-                      <div className="text-[10px] fp-mono uppercase tracking-[0.25em] text-[var(--text-mute)] mt-1">
+                      <div className="text-[13px] fp-mono uppercase tracking-[0.25em] text-gray-300 mt-1">
                         Verified · {new Date(u.email_verified_at).toLocaleString()}
                       </div>
                     )}
@@ -332,7 +332,7 @@ export default function Admin() {
                       </span>
                       {u.is_admin && <span className="text-[9px] fp-mono uppercase tracking-[0.3em] px-1.5 py-0.5 border border-[var(--red)] text-[var(--red)]">ADMIN</span>}
                     </div>
-                    <div className="text-[10px] fp-mono uppercase tracking-[0.25em] text-[var(--text-mute)] mt-1">
+                    <div className="text-[13px] fp-mono uppercase tracking-[0.25em] text-[var(--text-mute)] mt-1">
                       posts {u.posts_count} · invites {u.invites_count}
                       {u.recommended_by_nickname && <span> · ←{u.recommended_by_nickname}</span>}
                       {u.ban_reason && <span className="text-[var(--red)]"> · banned: {u.ban_reason}</span>}
@@ -368,11 +368,11 @@ export default function Admin() {
                 >
                   {k.code}
                 </button>
-                <div className="text-[10px] fp-mono uppercase tracking-[0.25em] text-[var(--text-mute)] mt-1">
+                <div className="text-[13px] fp-mono uppercase tracking-[0.25em] text-[var(--text-mute)] mt-1">
                   {k.source} · {k.used ? `used by ${k.used_by_id?.slice(0, 8)}…` : "available"}
                 </div>
               </div>
-              <span className={`text-[10px] fp-mono uppercase tracking-[0.3em] px-2 py-1 border ${k.used ? "border-[var(--line-strong)] text-[var(--text-mute)]" : "border-[var(--red)] text-[var(--red)]"}`}>
+              <span className={`text-[13px] fp-mono uppercase tracking-[0.3em] px-2 py-1 border ${k.used ? "border-[var(--line-strong)] text-[var(--text-mute)]" : "border-[var(--red)] text-[var(--red)]"}`}>
                 {k.used ? "Used" : "Available"}
               </span>
             </div>
@@ -388,11 +388,11 @@ export default function Admin() {
             <div key={l.id} className="py-4 flex items-center justify-between gap-3 flex-wrap" data-testid={`invite-log-${l.id}`}>
               <div>
                 <div className="font-bold text-sm">{l.invited_email}</div>
-                <div className="text-[10px] fp-mono uppercase tracking-[0.25em] text-[var(--text-mute)] mt-1">
+                <div className="text-[13px] fp-mono uppercase tracking-[0.25em] text-[var(--text-mute)] mt-1">
                   via {l.gate === "isu" ? "ISU Self-Auth" : `초대받음 from ${l.recommender_nickname || l.recommender_email || "?"}`}
                 </div>
               </div>
-              <span className="text-[10px] fp-mono uppercase tracking-[0.25em] text-[var(--text-mute)]">
+              <span className="text-[13px] fp-mono uppercase tracking-[0.25em] text-[var(--text-mute)]">
                 {new Date(l.joined_at).toLocaleString()}
               </span>
             </div>
@@ -400,7 +400,7 @@ export default function Admin() {
         </div>
       ) : (
         <div data-testid="leaderboard-list">
-          <div className="text-[10px] fp-mono uppercase tracking-[0.3em] text-[var(--text-mute)] mb-3">
+          <div className="text-[13px] fp-mono uppercase tracking-[0.3em] text-[var(--text-mute)] mb-3">
             Top recommenders by approved invites
           </div>
           {board.length === 0 ? (
@@ -416,7 +416,7 @@ export default function Admin() {
                   </span>
                   <div className="flex-1">
                     <div className="font-bold">{row.nickname || row.email}</div>
-                    <div className="text-[10px] fp-mono uppercase tracking-[0.25em] text-[var(--text-mute)] mt-1">{row.email}</div>
+                    <div className="text-[13px] fp-mono uppercase tracking-[0.25em] text-[var(--text-mute)] mt-1">{row.email}</div>
                   </div>
                   <span className="fp-mono text-base text-[var(--red)]">{row.invites}</span>
                 </div>
@@ -438,9 +438,9 @@ export default function Admin() {
             onClick={(e) => e.stopPropagation()}
           >
             <div>
-              <div className="text-[10px] fp-mono uppercase tracking-[0.4em] text-[var(--red)] mb-2">User Detail</div>
+              <div className="text-[13px] fp-mono uppercase tracking-[0.4em] text-[var(--red)] mb-2">User Detail</div>
               <div className="text-2xl font-bold tracking-tighter break-all">{detail.user.email}</div>
-              <div className="mt-2 flex items-center gap-2 flex-wrap text-[10px] fp-mono uppercase tracking-[0.25em]">
+              <div className="mt-2 flex items-center gap-2 flex-wrap text-[13px] fp-mono uppercase tracking-[0.25em]">
                 <span className={`px-1.5 py-0.5 border ${detail.user.gate === "isu" ? "border-[var(--text-mute)] text-[var(--text-mute)]" : "border-[var(--red)] text-[var(--red)]"}`}>
                   {detail.user.gate === "isu" ? "ISU" : "Invite"}
                 </span>
@@ -458,7 +458,7 @@ export default function Admin() {
             </div>
 
             <div className="border-t border-[var(--line)] pt-4">
-              <div className="text-[10px] fp-mono uppercase tracking-[0.3em] text-[var(--text-mute)] mb-2">Recommended By</div>
+              <div className="text-[13px] fp-mono uppercase tracking-[0.3em] text-[var(--text-mute)] mb-2">Recommended By</div>
               {detail.recommender ? (
                 <div className="text-sm" data-testid="detail-recommender">
                   <div className="font-bold">{detail.recommender.nickname}</div>
@@ -470,7 +470,7 @@ export default function Admin() {
             </div>
 
             <div className="border-t border-[var(--line)] pt-4">
-              <div className="text-[10px] fp-mono uppercase tracking-[0.3em] text-[var(--text-mute)] mb-3">
+              <div className="text-[13px] fp-mono uppercase tracking-[0.3em] text-[var(--text-mute)] mb-3">
                 Invited ({detail.invitees.length})
               </div>
               {detail.invitees.length === 0 ? (

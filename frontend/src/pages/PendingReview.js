@@ -19,7 +19,7 @@ export default function PendingReview() {
   return (
     <div className="min-h-screen flex flex-col items-center justify-center px-6 py-10">
       <div className="text-center fp-fade max-w-md">
-        <div className="text-[10px] uppercase tracking-[0.4em] fp-mono text-[var(--text-mute)]">Step 2 / 2</div>
+        <div className="text-[13px] uppercase tracking-[0.4em] fp-mono text-[var(--text-mute)]">Step 2 / 2</div>
         <h1 className="mt-4 text-4xl font-bold tracking-tighter">
           The Initiation<span className="text-[var(--red)]">.</span>
         </h1>
@@ -50,7 +50,7 @@ export default function PendingReview() {
           </button>
         </div>
       </div>
-      <div className="mt-12 text-[10px] fp-mono uppercase tracking-[0.3em] text-[var(--text-mute)]" data-testid="pending-email">
+      <div className="mt-12 text-[13px] fp-mono uppercase tracking-[0.3em] text-[var(--text-mute)]" data-testid="pending-email">
         {user?.email}
       </div>
     </div>

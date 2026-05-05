@@ -4,6 +4,13 @@ import api, { formatApiError } from "@/lib/api";
 import { toast } from "sonner";
 import { useAuth } from "@/context/AuthContext";
 
+const getLikeStyle = (count) => {
+  if (count >= 15) {
+    return "border-white shadow-[0_0_20px_rgba(255,255,255,0.4)] bg-zinc-900/20 hover:scale-[1.02] transition-all duration-300";
+  }  if (count >= 6) return "border-red-900	bg-[#131111]";
+  if (count >= 3) return "border-zinc-600";
+  return "border-white/5";
+};
 export default function Feed() {
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -45,18 +52,20 @@ export default function Feed() {
   }
 
   return (
-    <div className="space-y-12">
-      {/* Today header */}
-      <SlotHeader status={status} now={now} onCompose={() => navigate("/post/new")} />
+    <div className="space-y-12 pb-20">
+      <div className="bg-zinc-900/30 p-8 rounded-2xl border border-white/5 shadow-xl">
+        <SlotHeader status={status} now={now} onCompose={() => navigate("/post/new")} />
+      </div>
 
-      {/* Posts list */}
-      <section>
-        <div className="flex items-center justify-between mb-4">
-          <div className="text-[10px] uppercase tracking-[0.3em] fp-mono text-[var(--text-mute)]">
+      <section className="px-2">
+        <div className="flex items-center justify-between mb-6 px-4">
+          <div className="text-[13px] uppercase tracking-[0.3em] fp-mono text-zinc-100 font-semibold">
             Today's Five
           </div>
           {user?.is_admin && (
-            <div className="text-[10px] uppercase tracking-[0.3em] fp-mono text-[var(--red)]">Admin View · names visible</div>
+            <div className="text-[11px] uppercase tracking-[0.3em] fp-mono text-[var(--red)] opacity-80">
+              Admin View · names visible
+            </div>
           )}
         </div>
 
@@ -67,39 +76,50 @@ export default function Feed() {
             </div>
           </div>
         ) : (
-          <div className="divide-y divide-[var(--line)] border-y border-[var(--line)]" data-testid="posts-list">
-            {posts.map((p) => (
-              <article
-                key={p.id}
-                onClick={() => navigate(`/post/${p.id}`)}
-                className="py-6 cursor-pointer group"
-                data-testid={`post-${p.id}`}
-              >
-                <div className="flex items-center gap-3 text-[10px] uppercase tracking-[0.3em] fp-mono text-[var(--text-mute)] mb-3">
-                  <span>{p.is_admin_post ? <span className="text-[var(--red)]">{p.author_label}</span> : p.author_label}</span>
-                  <span>·</span>
-                  <span>{relTime(p.created_at)}</span>
-                  {p.blinded && <><span>·</span><span className="text-[var(--red)]">Blinded</span></>}
-                </div>
-                <div className={p.blinded && !user?.is_admin ? "fp-blinded" : ""}>
-                  <h3 className="text-xl font-bold tracking-tight group-hover:text-[var(--text)] text-[var(--text)] mb-2">
-                    {p.title}
-                  </h3>
-                  <p className="text-sm text-[var(--text-dim)] line-clamp-2 leading-relaxed">{p.content}</p>
-                </div>
-                <div className="mt-4 flex items-center gap-6 text-[10px] uppercase tracking-[0.3em] fp-mono text-[var(--text-mute)]">
-                  <button
-                    onClick={(e)=>toggleLike(p.id, e)}
-                    className={`hover:text-[var(--text)] flex items-center gap-2 ${p.liked_by_me ? "text-[var(--red)]" : ""}`}
-                    data-testid={`like-${p.id}`}
-                  >
-                    {p.liked_by_me && <span className="fp-dot"/>}
-                    Like {p.like_count}
-                  </button>
-                  <span>Comment {p.comment_count}</span>
-                </div>
-              </article>
-            ))}
+          <div className="space-y-4" data-testid="posts-list">
+            {posts.map((p) => {
+  const isPillarLevel = p.like_count >= 15;
+
+  return (
+    <article
+      key={p.id}
+      onClick={() => navigate(`/post/${p.id}`)}
+      className={`relative overflow-hidden py-8 px-8 cursor-pointer group bg-[#111111] border rounded-2xl transition-all duration-300 shadow-lg ${getLikeStyle(p.like_count)}`}
+      style={isPillarLevel ? {
+        borderColor: "rgba(212,175,55,0.4)",
+        background: "linear-gradient(135deg, rgba(200,16,46,0.04), rgba(212,175,55,0.02))"
+      } : {}}
+    >
+      {isPillarLevel && (
+        <div className="absolute top-0 left-0 w-1 h-full" style={{background: "linear-gradient(180deg, #D4AF37, #C8102E)"}}/>
+      )}
+      
+      <div className="relative z-10 flex items-center gap-3 text-[13px] uppercase tracking-[0.3em] fp-mono text-gray-300 mb-3">
+        <span>{p.is_admin_post ? <span className="text-[var(--red)]">{p.author_label}</span> : p.author_label}</span>
+        <span>·</span>
+        <span>{relTime(p.created_at)}</span>
+        {p.blinded && <><span>·</span><span className="text-[var(--red)]">Blinded</span></>}
+      </div>
+      <div className={`relative z-10 ${p.blinded && !user?.is_admin ? "fp-blinded" : ""}`}>
+        <h3 className="text-xl font-bold tracking-tight group-hover:text-[var(--text)] text-[var(--text)] mb-2">
+          {p.title}
+        </h3>
+        <p className="text-sm text-[var(--text-dim)] line-clamp-2 leading-relaxed">{p.content}</p>
+      </div>
+      <div className="relative z-10 mt-4 flex items-center gap-6 text-[13px] uppercase tracking-[0.3em] fp-mono text-gray-300">
+        <button
+          onClick={(e) => toggleLike(p.id, e)}
+          className={`hover:text-[var(--text)] flex items-center gap-2 ${p.liked_by_me ? "text-[var(--red)]" : ""}`}
+          data-testid={`like-${p.id}`}
+        >
+          {p.liked_by_me && <span className="fp-dot" />}
+          Like {p.like_count}
+        </button>
+        <span>Comment {p.comment_count}</span>
+      </div>
+    </article>
+  );
+})}
           </div>
         )}
       </section>
@@ -186,7 +206,7 @@ function SlotHeader({ status, now, onCompose }) {
           <div className="flex items-center justify-between gap-4 flex-wrap" data-testid="state-can-post">
             <div>
               <div className="text-[10px] uppercase tracking-[0.4em] fp-mono text-[var(--red)] mb-2 flex items-center gap-2">
-                <span className="fp-dot"/> Now Open
+                <span className="fp-dot" /> Now Open
               </div>
               <div className="text-base text-[var(--text-dim)]">한 번 클릭하면 끝. 신중하게.</div>
             </div>

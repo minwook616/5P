@@ -60,7 +60,7 @@ async def send_otp(to: str, code: str):
 
 
 async def send_password_reset(to: str, token: str):
-    link = f"{PUBLIC_BASE_URL}/reset/{token}"
+    link = link = f"http://localhost:3000/reset/{token}" # 업데이트 필요
     body = f"""
       <p style="margin:0 0 8px 0;font-size:15px;color:#F5F5F5;">Reset your password.</p>
       <p style="margin:8px 0 24px 0;font-size:13px;color:#8C8C8C;">Click the link below. It expires in 1 hour.</p>

@@ -5,7 +5,7 @@ export default function Rejected() {
   return (
     <div className="min-h-screen flex flex-col items-center justify-center px-6 py-10">
       <div className="text-center fp-fade max-w-md">
-        <div className="text-[10px] uppercase tracking-[0.4em] fp-mono text-[var(--red)]">Closed</div>
+        <div className="text-[13px] uppercase tracking-[0.4em] fp-mono text-[var(--red)]">Closed</div>
         <h1 className="mt-4 text-4xl font-bold tracking-tighter">
           Not this time<span className="text-[var(--red)]">.</span>
         </h1>

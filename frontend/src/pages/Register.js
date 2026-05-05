@@ -60,25 +60,25 @@ export default function Register() {
             className={`p-4 text-left transition-colors border-r border-[var(--line-strong)] ${isIsu ? "bg-[var(--red)] text-white" : "bg-transparent text-[var(--text-dim)] hover:text-[var(--text)]"}`}
             data-testid="tab-isu"
           >
-            <div className="text-[10px] fp-mono uppercase tracking-[0.3em] mb-1">Gate A</div>
+            <div className="text-[13px] fp-mono uppercase tracking-[0.3em] mb-1">Gate A</div>
             <div className="font-bold text-base">ISU Auth</div>
-            <div className={`text-[10px] mt-1 ${isIsu ? "text-white/80" : "text-[var(--text-mute)]"}`}>@iastate.edu only · Email OTP</div>
+            <div className={`text-[13px] mt-1 ${isIsu ? "text-white/80" : "text-[var(--text-mute)]"}`}>@iastate.edu only · Email OTP</div>
           </button>
           <button
             onClick={() => { setTab("invite"); setError(""); }}
             className={`p-4 text-left transition-colors ${!isIsu ? "bg-[var(--red)] text-white" : "bg-transparent text-[var(--text-dim)] hover:text-[var(--text)]"}`}
             data-testid="tab-invite"
           >
-            <div className="text-[10px] fp-mono uppercase tracking-[0.3em] mb-1">Gate B</div>
+            <div className="text-[13px] fp-mono uppercase tracking-[0.3em] mb-1">Gate B</div>
             <div className="font-bold text-base">Invitation</div>
-            <div className={`text-[10px] mt-1 ${!isIsu ? "text-white/80" : "text-[var(--text-mute)]"}`}>Any email · Pillar key + admin review</div>
+            <div className={`text-[13px] mt-1 ${!isIsu ? "text-white/80" : "text-[var(--text-mute)]"}`}>Any email · Pillar key + admin review</div>
           </button>
         </div>
 
         <form onSubmit={submit} className="mt-8 space-y-6">
           {!isIsu && (
             <div data-testid="invite-key-section">
-              <label className="block text-[10px] uppercase tracking-[0.3em] fp-mono text-[var(--text-mute)] mb-2">Recommendation Key</label>
+              <label className="block text-[13px] uppercase tracking-[0.3em] fp-mono text-[var(--text-mute)] mb-2">Recommendation Key</label>
               <input
                 className="fp-input fp-mono uppercase tracking-[0.2em]"
                 placeholder="5P-XXXXXXXX"
@@ -87,13 +87,13 @@ export default function Register() {
                 required
                 data-testid="register-key-input"
               />
-              <div className="mt-2 text-[10px] fp-mono uppercase tracking-[0.2em] text-[var(--text-mute)]">
+              <div className="mt-2 text-[13px] fp-mono uppercase tracking-[0.2em] text-[var(--text-mute)]">
                 Pillars get one. For life.
               </div>
             </div>
           )}
           <div>
-            <label className="block text-[10px] uppercase tracking-[0.3em] fp-mono text-[var(--text-mute)] mb-2">
+            <label className="block text-[13px] uppercase tracking-[0.3em] fp-mono text-[var(--text-mute)] mb-2">
               {isIsu ? "School Email" : "Email"}
             </label>
             <input
@@ -107,7 +107,7 @@ export default function Register() {
             />
           </div>
           <div>
-            <label className="block text-[10px] uppercase tracking-[0.3em] fp-mono text-[var(--text-mute)] mb-2">Password</label>
+            <label className="block text-[13px] uppercase tracking-[0.3em] fp-mono text-[var(--text-mute)] mb-2">Password</label>
             <input
               type="password"
               className="fp-input"
@@ -124,7 +124,7 @@ export default function Register() {
             {loading ? "..." : (isIsu ? "Send Verification" : "Apply")}
           </button>
 
-          <div className="text-[10px] fp-mono uppercase tracking-[0.25em] text-[var(--text-mute)] leading-relaxed">
+          <div className="text-[13px] fp-mono uppercase tracking-[0.25em] text-[var(--text-mute)] leading-relaxed">
             {isIsu
               ? "An ISU email proves you. We'll send a 6-digit code, you verify, you're in."
               : "Without an ISU email, your pillar vouches for you. The admin still has the final word."}

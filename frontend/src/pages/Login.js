@@ -43,7 +43,7 @@ export default function Login() {
 
         <form onSubmit={submit} className="mt-10 space-y-6">
           <div>
-            <label className="block text-[10px] uppercase tracking-[0.3em] fp-mono text-[var(--text-mute)] mb-2">Email</label>
+            <label className="block text-[13px] uppercase tracking-[0.3em] fp-mono text-[var(--text-mute)] mb-2">Email</label>
             <input
               type="email"
               className="fp-input"
@@ -55,7 +55,7 @@ export default function Login() {
             />
           </div>
           <div>
-            <label className="block text-[10px] uppercase tracking-[0.3em] fp-mono text-[var(--text-mute)] mb-2">Password</label>
+            <label className="block text-[13px] uppercase tracking-[0.3em] fp-mono text-[var(--text-mute)] mb-2">Password</label>
             <input
               type="password"
               className="fp-input"

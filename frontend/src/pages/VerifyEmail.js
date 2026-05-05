@@ -40,7 +40,7 @@ export default function VerifyEmail() {
   return (
     <div className="min-h-screen flex items-center justify-center px-6 py-10">
       <div className="w-full max-w-sm fp-fade text-center">
-        <div className="text-[10px] uppercase tracking-[0.4em] fp-mono text-[var(--text-mute)]">Step 1 / 2</div>
+        <div className="text-[13px] uppercase tracking-[0.4em] fp-mono text-[var(--text-mute)]">Step 1 / 2</div>
         <h1 className="mt-4 text-3xl font-bold tracking-tighter">
           Check your inbox<span className="text-[var(--red)]">.</span>
         </h1>

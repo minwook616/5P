@@ -1,5 +1,7 @@
 from dotenv import load_dotenv
 from pathlib import Path
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / ".env")
@@ -51,6 +53,7 @@ CHAMPION_THRESHOLD = int(os.environ.get("PILLAR_THRESHOLD", os.environ.get("CHAM
 PILLAR_THRESHOLD = CHAMPION_THRESHOLD
 APP_ENV = os.environ.get("APP_ENV", "dev").lower()
 DEV_MODE = APP_ENV != "prod"
+FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:3000") # 업데이트 필요
 
 mongo_url = os.environ["MONGO_URL"]
 client = AsyncIOMotorClient(mongo_url)
@@ -249,6 +252,8 @@ class AdminBoostIn(BaseModel):
 class BanIn(BaseModel):
     reason: str = Field(default="", max_length=300)
 
+class ReportIn(BaseModel):
+    reason: str
 
 def email_allowed(email: str) -> bool:
     return email.lower().endswith(f"@{ALLOWED_DOMAIN}")
@@ -652,7 +657,7 @@ async def create_post(body: PostIn, user: dict = Depends(require_active)):
 
 @api.get("/posts")
 async def list_posts(date_key: Optional[str] = None, user: dict = Depends(require_active)):
-    q = {"is_pillar": {"$ne": True}, "is_champion": {"$ne": True}}
+    q = {}
     if date_key:
         q["date_key"] = date_key
     cursor = db.posts.find(q, {"_id": 0}).sort("created_at", -1).limit(200)
@@ -701,7 +706,7 @@ async def like(pid: str, user: dict = Depends(require_active)):
 
 
 @api.post("/posts/{pid}/report")
-async def report_post(pid: str, user: dict = Depends(require_active)):
+async def report_post(pid: str, body: ReportIn, user: dict = Depends(require_active)):
     p = await db.posts.find_one({"id": pid}, {"_id": 0})
     if not p:
         raise HTTPException(404, "게시글을 찾을 수 없습니다.")
@@ -1334,8 +1339,8 @@ app.include_router(api)
 
 app.add_middleware(
     CORSMiddleware,
+    allow_origins=["*"],
     allow_credentials=True,
-    allow_origins=os.environ.get("CORS_ORIGINS", "*").split(","),
     allow_methods=["*"],
     allow_headers=["*"],
 )

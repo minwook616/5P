@@ -23,12 +23,12 @@ export default function Profile() {
   return (
     <div className="space-y-10 max-w-md">
       <div>
-        <div className="text-[10px] uppercase tracking-[0.4em] fp-mono text-[var(--text-mute)] mb-2">Profile</div>
+        <div className="text-[13px] uppercase tracking-[0.4em] fp-mono text-[var(--text-mute)] mb-2">Profile</div>
         <div className="text-3xl font-bold tracking-tighter break-all">
           {user.email}<span className="text-[var(--red)]">.</span>
         </div>
         {user.is_admin && (
-          <div className="mt-3 inline-block text-[10px] uppercase tracking-[0.4em] fp-mono text-[var(--red)] border border-[var(--red)] px-2 py-1">
+          <div className="mt-3 inline-block text-[13px] uppercase tracking-[0.4em] fp-mono text-[var(--red)] border border-[var(--red)] px-2 py-1">
             Administrator
           </div>
         )}
@@ -49,7 +49,7 @@ export default function Profile() {
       {/* Recommendation Keys */}
       <div className="border-t border-[var(--line)] pt-6">
         <div className="flex items-center justify-between mb-3">
-          <div className="text-[10px] uppercase tracking-[0.4em] fp-mono text-[var(--text-mute)]">My Recommendation Keys</div>
+          <div className="text-[13px] uppercase tracking-[0.4em] fp-mono text-[var(--text-mute)]">My Recommendation Keys</div>
         </div>
         {keys.length === 0 ? (
           <div className="text-xs text-[var(--text-mute)] fp-mono uppercase tracking-[0.25em]">
@@ -66,7 +66,7 @@ export default function Profile() {
                 >
                   {k.code}
                 </button>
-                <span className={`text-[10px] fp-mono uppercase tracking-[0.3em] px-2 py-0.5 border ${k.used ? "border-[var(--line-strong)] text-[var(--text-mute)]" : "border-[var(--red)] text-[var(--red)]"}`}>
+                <span className={`text-[13px] fp-mono uppercase tracking-[0.3em] px-2 py-0.5 border ${k.used ? "border-[var(--line-strong)] text-[var(--text-mute)]" : "border-[var(--red)] text-[var(--red)]"}`}>
                   {k.used ? "Used" : "Available"}
                 </span>
               </div>
