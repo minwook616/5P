@@ -32,17 +32,20 @@
 - Anonymous handles + admin direct line
 - Reports + blind
 
-### 2026-02-05 — MVP3 (current)
-- ✅ Recommendation Key initiation (one-per-life, per-key consumption)
-- ✅ Email OTP via Resend (dark-themed HTML emails)
-- ✅ Admin approval workflow (pending_email → pending_review → active/rejected)
-- ✅ Champion Board (≥15 likes, permanent, red+gold theme)
-- ✅ Admin Shadow Mode (comment as 운영자 toggle)
-- ✅ Admin Like Pump (slider + number input)
-- ✅ Password reset via email
-- ✅ Strict status gating (no peek before active)
-- ✅ Status pages: VerifyEmail, PendingReview, Rejected with infinite-loading aesthetic
-- ✅ 22/22 backend tests + frontend smoke
+### 2026-02-05 — MVP4 (current — Dual Gateway + Genealogy)
+- ✅ Dual Gateway: Gate A (ISU email + OTP → auto-active) / Gate B (any email + recommendation key → admin manual review)
+- ✅ Recommender genealogy via `invite_logs` collection — tracks invited_email, recommender_id, recommender_nickname, gate, joined_at
+- ✅ Admin pending list shows recommender nickname + recommender stats (posts, invites)
+- ✅ Admin user-detail modal: recommender info + invitees (계보) + activity stats (posts, likes received, keys owned/used, invites count)
+- ✅ Admin Invite Log tab — chronological join history with gate flag
+- ✅ Identity Protection: Resend API key kept in .env, never exposed to frontend
+- ✅ 21/21 backend tests + frontend smoke
+
+### 2026-02-05 — MVP3 (Initiation + Champion Board)
+- (See history above)
+
+### 2026-02-05 — MVP2 (5P concept) / MVP1 (Everytime style)
+- Pure dark UI, slot system, Golden Hour, daily_state, anonymous handles, admin direct line, reports + blind
 
 ## Backlog (P1)
 - Resend domain verification (currently testing-mode = Resend only delivers to account owner; OTP also logged to backend for dev)
