@@ -1,58 +1,67 @@
 # 5P (Five Posts) — PRD
 
 ## Original Problem Statement
-- "에브리타임 같은 사이트 만들어줘" (Build an Everytime-like site)
-- Pivoted to **5P (Five Posts)**: minimalist anonymous community for Iowa State students with strict scarcity rules
-- Slogan: "5 Stories, 5 People, Once a day."
+"에브리타임 같은 사이트 만들어줘" → pivoted to **5P** — minimalist, scarcity-driven anonymous community for Iowa State.
 
 ## Architecture
-- **Backend**: FastAPI + Motor + MongoDB. JWT (httpOnly cookies, samesite=none, secure). bcrypt passwords.
-- **Frontend**: React + Tailwind. Pure dark theme (#0A0A0A) with Cardinal Red (#C8102E) accents only. Pretendard font.
-- **Auth**: Email/password, gated to `@iastate.edu` only (admin bypass).
-- **Storage**: collections — users, posts, comments, messages, daily_state.
+- **Backend**: FastAPI + Motor + MongoDB. JWT (httpOnly cookies). bcrypt. Resend for email.
+- **Frontend**: React + Tailwind. Pure dark + Cardinal Red `#C8102E`. Pretendard.
+- **Collections**: users, posts, comments, messages, daily_state, recommendation_keys, email_otps, password_resets.
+- **Timezone**: America/Chicago.
 
 ## User Personas
-1. **Iowa State student**: receives only 1 post/day, must wait through Golden Hour, may become Champion next day if their post tops likes.
-2. **Champion (yesterday's #1)**: instant 00:00 unlock + 24h auto-purging private channel to admin.
-3. **Admin (operator)**: bypasses all gates, sees real author identities, can post 5/day, can moderate.
+1. Iowa State student (recommended in by a champion, approved by admin)
+2. Champion (yesterday's #1 likes OR post crossed 15 likes — gets lifetime key)
+3. Admin (operator) — full visibility, unlimited keys, like-pump, identity toggle
 
-## Core Game Rules (P0 — implemented)
-- Server-wide cap: 5 posts/day
-- Per-user cap: 1 post/day (admin: 5/day)
-- Golden Hour: random unlock between 00:00–01:00 America/Chicago
-- Champion priority + admin direct line (24h auto-purge)
-- 3 reports → blinded blur
-- Full anonymity (posts labeled `#1`–`#5`, comments `익명N` or `글쓴이`, DMs `ANON-XXXX`)
+## Core Game Rules
+- 5 posts/day server-wide · 1/user · admin 5/user
+- Golden Hour: random unlock 00:00-01:00 CST
+- Champion: yesterday's top likes → instant 00:00 unlock + 24h auto-purge admin DM
+- 3 reports → blinded
+- Posts ≥15 likes → permanent Champion Board archive
+- Author's first ever 15-like post → 1 lifetime recommendation key
 
-## Implemented (2026-02-05)
-- ✅ Pure dark Pure-Minimal UI (Gate, Login, Register, Feed, NewPost, PostDetail, Messages, Profile)
-- ✅ @iastate.edu email gate (admin override)
-- ✅ Slot visualization (`AVAILABLE: X/5` + 5-bar slot grid)
-- ✅ Status state machine (Spectator / Done / Waiting + countdown / CanPost)
-- ✅ Posts with reactions (like, report, delete)
-- ✅ Anonymous comments with stable per-user labels (`익명1`, `글쓴이`, `운영자`)
-- ✅ Double-blind DMs (ANON-XXXX handles)
-- ✅ Champion → Admin Direct Line (24h purge)
-- ✅ Admin views with real author emails
-- ✅ Test suite (18/18 passing)
+## Implementation Timeline
+
+### 2026-02-05 — MVP1 (Everytime-style)
+- Initial anonymous board + DM (later replaced)
+
+### 2026-02-05 — MVP2 (5P concept)
+- Pure dark UI, slot system, Golden Hour, daily_state
+- Anonymous handles + admin direct line
+- Reports + blind
+
+### 2026-02-05 — MVP3 (current)
+- ✅ Recommendation Key initiation (one-per-life, per-key consumption)
+- ✅ Email OTP via Resend (dark-themed HTML emails)
+- ✅ Admin approval workflow (pending_email → pending_review → active/rejected)
+- ✅ Champion Board (≥15 likes, permanent, red+gold theme)
+- ✅ Admin Shadow Mode (comment as 운영자 toggle)
+- ✅ Admin Like Pump (slider + number input)
+- ✅ Password reset via email
+- ✅ Strict status gating (no peek before active)
+- ✅ Status pages: VerifyEmail, PendingReview, Rejected with infinite-loading aesthetic
+- ✅ 22/22 backend tests + frontend smoke
 
 ## Backlog (P1)
-- Real-time updates via WebSockets/SSE (live slot fill, new comments, new DMs)
-- Email verification + password reset (currently no verification — anyone with iastate-style address can register)
-- Rate limit on /auth/register
-- Push notifications for unread DMs
-- Champion history / leaderboard archive
-- Multi-school support (per-domain feeds)
+- Resend domain verification (currently testing-mode = Resend only delivers to account owner; OTP also logged to backend for dev)
+- Split server.py into routers (~970 lines, past 700-line guideline)
+- Gate dev-mode OTP logging behind APP_ENV
+- Wrap email sends in asyncio.create_task to avoid request hangs
+- Brute-force lockout on /auth/login + rate limit on /forgot-password
+- Pin CORS origin (currently `*` with credentials)
+- WebSocket/SSE for real-time slot/comment/DM updates
 
-## P2
+## Backlog (P2)
+- Champion archive views (search, year, top-of-time)
+- Admin batch ops (multi-approve, batch mint)
+- Champion winner card auto-generated for IG sharing (Nano Banana 1-line)
 - Mobile native app
-- Themes (different cardinal colors per school)
-- Daily digest email
-- Post scheduling (release at exact unlock time)
-- Better admin moderation panel (search, batch actions)
+- Multi-school deployment per-domain feeds
+- TTL index on admin-line messages
 
 ## Next Tasks
-- User testing on the Iowa State campus
-- Set up email verification before public launch
-- Pin CORS origin (currently `*` with credentials)
-- Consider splitting server.py into routers as it approaches 700 lines
+- Verify Resend domain (e.g. `5p.app`) so OTPs reach real users
+- Split server.py before next feature iteration
+- Add APP_ENV check to suppress secret logging in production
