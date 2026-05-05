@@ -1,0 +1,119 @@
+{
+  "theme": "light",
+  "archetype": "3 (Pastel & Soft) + Neo-Brutalist Twist",
+  "description": "A modern, trendy Gen-Z community app (like Everytime but fresh). Uses Neo-Brutalism with soft pastel colors, hard black borders, and sharp shadows to create a playful, energetic, and highly interactive feel. Tailored for Korean university students.",
+  "colors": {
+    "background": {
+      "default": "#FAF9F6",
+      "paper": "#FFFFFF",
+      "muted": "#F3F2EE"
+    },
+    "primary": {
+      "default": "#FF5E5B",
+      "hover": "#E04845",
+      "text": "#FFFFFF"
+    },
+    "secondary": {
+      "default": "#B8B8FF",
+      "hover": "#9C9CFF",
+      "text": "#1A1A1A"
+    },
+    "accent": {
+      "mint": "#A7F3D0",
+      "yellow": "#FDE047",
+      "lime": "#A3E635"
+    },
+    "text": {
+      "primary": "#1A1A1A",
+      "secondary": "#4B5563",
+      "disabled": "#9CA3AF"
+    },
+    "border": {
+      "default": "#1A1A1A",
+      "muted": "#D1D5DB"
+    }
+  },
+  "typography": {
+    "fontFamily": {
+      "heading": "'Outfit', 'Pretendard', sans-serif",
+      "body": "'Pretendard', 'Noto Sans KR', sans-serif",
+      "mono": "'JetBrains Mono', monospace"
+    },
+    "hierarchy": {
+      "h1": "text-4xl sm:text-5xl font-black tracking-tighter text-[#1A1A1A]",
+      "h2": "text-2xl sm:text-3xl font-bold tracking-tight text-[#1A1A1A]",
+      "h3": "text-xl sm:text-2xl font-bold text-[#1A1A1A]",
+      "body": "text-base font-medium leading-relaxed text-[#1A1A1A]",
+      "small": "text-sm font-semibold text-[#4B5563]"
+    }
+  },
+  "spacing": {
+    "container": "max-w-3xl mx-auto px-6",
+    "section": "py-12 md:py-16",
+    "card_padding": "p-6 sm:p-8",
+    "gap": "gap-6 md:gap-8"
+  },
+  "components": {
+    "card": {
+      "base": "bg-white border-2 border-[#1A1A1A] rounded-2xl shadow-[6px_6px_0px_0px_#1A1A1A] overflow-hidden transition-all duration-200",
+      "hover": "hover:translate-y-[2px] hover:translate-x-[2px] hover:shadow-[4px_4px_0px_0px_#1A1A1A]"
+    },
+    "button": {
+      "primary": "inline-flex items-center justify-center font-bold px-6 py-3 bg-[#FF5E5B] text-white border-2 border-[#1A1A1A] rounded-xl shadow-[4px_4px_0px_0px_#1A1A1A] transition-all hover:translate-y-[2px] hover:translate-x-[2px] hover:shadow-[2px_2px_0px_0px_#1A1A1A] active:translate-y-[4px] active:translate-x-[4px] active:shadow-none",
+      "secondary": "inline-flex items-center justify-center font-bold px-6 py-3 bg-[#B8B8FF] text-[#1A1A1A] border-2 border-[#1A1A1A] rounded-xl shadow-[4px_4px_0px_0px_#1A1A1A] transition-all hover:translate-y-[2px] hover:translate-x-[2px] hover:shadow-[2px_2px_0px_0px_#1A1A1A] active:translate-y-[4px] active:translate-x-[4px] active:shadow-none",
+      "ghost": "inline-flex items-center justify-center font-bold px-4 py-2 text-[#1A1A1A] hover:bg-[#F3F2EE] rounded-lg transition-colors"
+    },
+    "input": {
+      "base": "w-full bg-white border-2 border-[#1A1A1A] rounded-xl px-4 py-3 text-[#1A1A1A] placeholder-[#9CA3AF] focus:outline-none focus:ring-0 focus:border-[#FF5E5B] focus:shadow-[4px_4px_0px_0px_#FF5E5B] transition-all"
+    },
+    "badge": {
+      "base": "inline-flex items-center px-3 py-1 rounded-full text-xs font-black uppercase tracking-wider border-2 border-[#1A1A1A]",
+      "categories": {
+        "free": "bg-[#A7F3D0] text-[#1A1A1A]",
+        "secret": "bg-[#B8B8FF] text-[#1A1A1A]",
+        "info": "bg-[#FDE047] text-[#1A1A1A]"
+      }
+    }
+  },
+  "layout_patterns": {
+    "feed": "grid grid-cols-1 gap-6",
+    "dashboard_grid": "grid grid-cols-1 md:grid-cols-12 gap-8",
+    "sidebar": "col-span-1 md:col-span-4",
+    "main_content": "col-span-1 md:col-span-8"
+  },
+  "motion": {
+    "transition": "transition-all duration-200 ease-out",
+    "page_load": "animate-in fade-in slide-in-from-bottom-4 duration-500",
+    "hover_lift": "hover:-translate-y-1"
+  },
+  "media": {
+    "images": {
+      "auth_background": {
+        "url": "https://images.pexels.com/photos/29474097/pexels-photo-29474097.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+        "description": "Abstract pastel geometric shapes for the login/registration page hero section"
+      },
+      "community_hero": {
+        "url": "https://images.pexels.com/photos/7683897/pexels-photo-7683897.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+        "description": "Diverse college students laughing, useful for a welcome card or about section"
+      }
+    },
+    "icons": {
+      "library": "lucide-react",
+      "style": "Bold, 2px stroke width, matching the neo-brutalist aesthetic"
+    }
+  },
+  "accessibility": {
+    "contrast": "All borders and texts use #1A1A1A for high contrast against pastel backgrounds.",
+    "focus": "Focus states use bold borders and shadow changes rather than subtle rings.",
+    "testing": "All interactive elements must include data-testid (e.g., data-testid='submit-post-btn')"
+  },
+  "instructions_to_main_agent": [
+    "Install 'lucide-react' for icons.",
+    "Ensure 'Pretendard' or 'Noto Sans KR' is imported in the main CSS or index.html for Korean typography support.",
+    "Do not use default Shadcn styles directly without customizing the borders and shadows to match the neo-brutalist rules defined here.",
+    "Use standard <div> cards with the specified neo-brutalist classes instead of standard Shadcn cards to ensure the thick borders and sharp shadows are applied correctly.",
+    "For the daily post limit indicator, use a bold visual element (like a thick progress bar or large badge) to fit the Gen-Z aesthetic.",
+    "Add 'data-testid' attributes to all form inputs, buttons, and navigation links.",
+    "Use the provided pastel colors with #1A1A1A text/borders. Avoid gray text on colored backgrounds; always ensure high contrast."
+  ]
+}
