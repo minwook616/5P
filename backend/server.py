@@ -408,7 +408,8 @@ async def resend_otp(user: dict = Depends(get_current_user)):
         "created_at": now_utc().isoformat(),
     })
     await send_otp(user["email"], code)
-    logger.info(f"OTP resend for {user['email']} (dev): {code}")
+    if DEV_MODE:
+        logger.info(f"OTP resend for {user['email']} (dev): {code}")
     return {"ok": True}
 
 
@@ -451,7 +452,8 @@ async def forgot_password(request: Request, body: ForgotIn):
             "created_at": now_utc().isoformat(),
         })
         await send_password_reset(email, token)
-        logger.info(f"Password reset for {email} (dev token): {token}")
+        if DEV_MODE:
+            logger.info(f"Password reset for {email} (dev token): {token}")
     return {"ok": True}
 
 

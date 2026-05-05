@@ -32,14 +32,27 @@
 - Anonymous handles + admin direct line
 - Reports + blind
 
-### 2026-02-05 — MVP4 (current — Dual Gateway + Genealogy)
-- ✅ Dual Gateway: Gate A (ISU email + OTP → auto-active) / Gate B (any email + recommendation key → admin manual review)
-- ✅ Recommender genealogy via `invite_logs` collection — tracks invited_email, recommender_id, recommender_nickname, gate, joined_at
-- ✅ Admin pending list shows recommender nickname + recommender stats (posts, invites)
-- ✅ Admin user-detail modal: recommender info + invitees (계보) + activity stats (posts, likes received, keys owned/used, invites count)
-- ✅ Admin Invite Log tab — chronological join history with gate flag
-- ✅ Identity Protection: Resend API key kept in .env, never exposed to frontend
-- ✅ 21/21 backend tests + frontend smoke
+### 2026-02-05 — MVP5 (current — Pillar Rename + Hardening)
+- ✅ Champion → Pillar global rename (code, DB, UI). `/champions` kept as backwards-compat alias.
+- ✅ Startup migration: `is_champion`→`is_pillar`, `champion_at`→`pillar_at`, `champion_id`→`pillar_id`, `keys.source` "champion"→"pillar"
+- ✅ `APP_ENV='prod'` gates dev OTP/reset-token log lines (3 sites: register OTP, resend OTP, reset token)
+- ✅ Rate-limit via slowapi: `/auth/register/isu` 5/min, `/auth/register/invite` 5/min, `/auth/login` 10/min, `/auth/forgot-password` 3/min — Korean 429 message
+- ✅ Batch admin: `POST /api/admin/users/batch-approve|batch-reject {user_ids}` — UI checkboxes + select-all
+- ✅ Suspicious recommender flags in `/admin/pending`: HIGH_VOLUME, FRESH_SPAMMER, HIGH_REJECT_RATE
+- ✅ `/admin/leaderboard` — top recommenders by approved invites (auto IG-shareable concept)
+- ✅ Pillar key emails rebranded ("Pillar's Key", "Pillar Key Granted")
+- ✅ 39/39 backend pytest + frontend smoke 90% (1 pillar-badge edge case fixed post-test)
+
+### 2026-02-05 — MVP4 (Dual Gateway)
+- See history.
+
+## Backlog (P1 — explicit user requests retained for next iteration)
+- **Resend domain verification** (USER ACTION at https://resend.com/domains; update `SENDER_EMAIL` in .env when done)
+- **server.py router split** (~1216 lines → auth, admin, pillars, posts, comments, messages routers)
+- One-time migration flag in `meta` collection to skip Pillar migration on subsequent restarts
+- `asyncio.gather` for batch_approve email sends (currently serial)
+- Login rate-limit keyed on (ip, email) to avoid throttling real users from shared k8s ingress IP
+- Slowapi storage → Redis for tighter accuracy in multi-worker
 
 ### 2026-02-05 — MVP3 (Initiation + Champion Board)
 - (See history above)

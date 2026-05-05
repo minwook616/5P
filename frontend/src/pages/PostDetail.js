@@ -121,7 +121,7 @@ export default function PostDetail() {
           <span className={post.is_admin_post ? "text-[var(--red)]" : ""}>{post.author_label}</span>
           <span>·</span>
           <span>{relTime(post.created_at)}</span>
-          {post.is_pillar && <><span>·</span><span style={{color:"#D4AF37"}}>★ Pillar</span></>}
+          {(post.is_pillar || post.is_champion) && <><span>·</span><span style={{color:"#D4AF37"}}>★ Pillar</span></>}
           {post.blinded && <><span>·</span><span className="text-[var(--red)]">Blinded {post.report_count != null ? `(${post.report_count})` : ""}</span></>}
           <span className="ml-auto" />
           {post.is_mine || user?.is_admin ? (
