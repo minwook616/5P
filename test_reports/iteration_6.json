@@ -1,0 +1,45 @@
+{
+  "summary": "Iter 6 (Admin Full Control toolset — user search / ban / unban / CSV export) tested. Backend pytest: 49/49 PASSED (39 prior + 10 new TestAdminUserControl). Frontend smoke verified: 5 admin tabs (tab-pending/tab-users/tab-keys/tab-logs/tab-board), Users panel renders user-search-input + filter-status + filter-gate + search-btn + export-csv-btn + users-list, search 'admin' returned 3 rows, status=active filter returned 42 rows with 39 Ban buttons (admin row correctly omits Ban), CSV button visible. Ban/unban full lifecycle (login 403 '차단된 계정입니다.', /posts 403, unban → re-login OK) confirmed via API tests.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "GET /api/admin/users", "issue": "Default sort is created_at desc + limit 50; with current ~85+ user dataset, the auto-seeded admin (oldest row) is pushed off the first page. Consumers must paginate or use q=admin to surface admin in listings."},
+      {"endpoint": "GET /api/admin/users/export.csv", "issue": "Does not include uid/id column — recommend adding 'id' as first column so external tools can correlate back to ban/unban API."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Admin tabs", "issues": ["Visible tab label uses 'INITIATION (53)' instead of 'PENDING' — cosmetic copy mismatch with admin-pending semantic; data-testid=tab-pending is correct."]},
+      {"screen": "Users panel", "issues": ["Status filter dropdown defaults to 'ACTIVE' instead of empty (all). New admin opening the tab will not see pending/banned/rejected users until they manually clear the filter — moderate UX issue. Recommend default empty/'All Statuses'."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/backend_test.py",
+    "/app/test_reports/pytest/iter6.xml"
+  ],
+  "action_items": [
+    "(Optional) Add 'id' column as first column in /admin/users/export.csv for round-trip correlation.",
+    "(Optional) Default Admin Users-tab status filter to empty/'All Statuses' so admins see pending+banned by default.",
+    "(Cosmetic) Rename visible tab label from 'INITIATION' to 'PENDING' to match endpoint and product spec; or update spec.",
+    "Carry forward iter5 items: gate logger.info OTP-resend (server.py:411) and password-reset (server.py:454) behind DEV_MODE; split server.py (now 1341 lines) into routers; CSS uppercase on nav-pillars."
+  ],
+  "critical_code_review_comments": [
+    "server.py is now 1341 lines (was 1210 in iter5, 87% over 700-line guideline). Router split is overdue and was explicitly deferred per agent_to_agent_context_note.",
+    "admin_user_search performs N+1 queries (count_documents per user for posts_count and invites_count). For >200 users this is slow; consider $facet aggregation or denormalised counters.",
+    "admin_export_csv uses StringIO and returns the entire CSV as a single chunk via iter([output.getvalue()]) — for 10k+ users this buffers ~MBs in memory. For now (current dataset ~85), fine; revisit if user count grows.",
+    "Banned user with pre-existing valid JWT cookie will be force-logged-out on next /posts call (require_active 403), but /auth/me still returns 200 with status=banned. Frontend should listen for status=banned in /auth/me and trigger client-side logout to avoid stale UX.",
+    "ban_reason in admin_unban is $unset, but original ban audit trail is now lost. Consider keeping a ban_history array for audit retention."
+  ],
+  "updated_files": [
+    "/app/backend/tests/backend_test.py"
+  ],
+  "success_rate": {"backend": "100% (49/49 pytest, including all 4 rate-limit tests + 10 new iter6 tests)", "frontend": "Smoke 100% — all data-testids on Users tab present and functional; ban/unban inline buttons render correctly with admin row excluded from Ban."},
+  "test_credentials": "Admin: admin@iastate.edu / admin123 (from /app/memory/test_credentials.md). New iter6 tests create disposable test_<hex>@iastate.edu users for ban/unban lifecycle.",
+  "seed_data_creation": "Iter6 tests created ~5 additional ISU test users + 2 invite users (1 banned then unbanned within test). Cumulative DB now has 53 pending users, 42+ active, 0 banned (cleaned up by unban). 86 minted recommendation keys.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "TestAdminUserControl class added to /app/backend/tests/backend_test.py (10 tests, all green). New helpers re-use _admin_session, _register_isu_safe, _register_invite. Iter6 endpoints confirmed: GET /admin/users (q/status/gate/limit), POST /admin/users/{uid}/ban (BanIn{reason}), POST /admin/users/{uid}/unban, GET /admin/users/export.csv. Login of banned account returns 403 '차단된 계정입니다.' Frontend testids verified live: tab-pending/tab-users/tab-keys/tab-logs/tab-board, users-panel, user-search-input, filter-status, filter-gate, search-btn, export-csv-btn, users-list, user-{uid}, ban-{uid} (no unban-{uid} or banned rows in current dataset since unban test cleaned up). modal-ban / modal-unban / modal-approve / modal-reject / modal-close in detail modal — not exercised live. Full backend suite runtime ~3 min due to 60-90s rate-limit recovery sleeps in TestZRateLimits.",
+  "rca of the issue": "N/A — no failing tests. All iteration 6 backend endpoints and frontend Users tab are functioning per spec."
+}

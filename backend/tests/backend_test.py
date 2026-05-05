@@ -541,6 +541,140 @@ class TestDevModeLogging:
 
 
 # ============================================================
+# Iteration 6 — Admin Full Control (user search / ban / unban / CSV export)
+class TestAdminUserControl:
+    def test_user_search_no_params_returns_admin_with_counts(self):
+        a = _admin_session()
+        r = a.get(f"{API}/admin/users", params={"limit": 200})
+        assert r.status_code == 200, r.text
+        items = r.json()
+        assert isinstance(items, list) and len(items) > 0
+        admin = next((u for u in items if u.get("is_admin")), None)
+        if not admin:
+            # large dataset: explicitly search by admin email
+            r = a.get(f"{API}/admin/users", params={"q": ADMIN_EMAIL})
+            items = r.json()
+            admin = next((u for u in items if u.get("is_admin")), None)
+        assert admin, "admin user must appear in /admin/users"
+        # counts present
+        assert "posts_count" in admin
+        assert "invites_count" in admin
+        assert isinstance(admin["posts_count"], int)
+        assert isinstance(admin["invites_count"], int)
+        # sensitive field stripped
+        assert "password_hash" not in admin
+
+    def test_user_search_requires_admin(self):
+        s, email, uid = _register_isu_safe()
+        r = s.get(f"{API}/admin/users")
+        assert r.status_code == 403
+
+    def test_user_search_q_regex_match(self):
+        a = _admin_session()
+        # Search by partial of admin email
+        r = a.get(f"{API}/admin/users", params={"q": "admin"})
+        assert r.status_code == 200
+        items = r.json()
+        emails = [u["email"] for u in items]
+        assert any("admin" in e.lower() for e in emails), emails
+
+    def test_user_search_status_filter_pending(self):
+        a = _admin_session()
+        # Ensure at least one pending exists
+        c = _mint_admin_key()
+        _register_invite(c)
+        r = a.get(f"{API}/admin/users", params={"status": "pending_review"})
+        assert r.status_code == 200
+        items = r.json()
+        assert len(items) > 0
+        for u in items:
+            assert u["status"] == "pending_review"
+
+    def test_user_search_gate_filter_isu(self):
+        a = _admin_session()
+        r = a.get(f"{API}/admin/users", params={"gate": "isu"})
+        assert r.status_code == 200
+        items = r.json()
+        assert len(items) > 0
+        for u in items:
+            assert u["gate"] == "isu"
+
+    def test_ban_admin_forbidden(self):
+        a = _admin_session()
+        admin_me = a.get(f"{API}/auth/me").json()
+        r = a.post(f"{API}/admin/users/{admin_me['id']}/ban", json={"reason": "x"})
+        assert r.status_code == 403
+        body = r.text
+        assert "운영자" in body or "자기 자신" in body, body
+
+    def test_ban_unban_regular_user_flow(self):
+        a = _admin_session()
+        # Create a regular ISU user (active)
+        s, email, uid = _register_isu_safe()
+        # Ban
+        rb = a.post(f"{API}/admin/users/{uid}/ban", json={"reason": "spam test"})
+        assert rb.status_code == 200, rb.text
+        # Confirm via search filter status=banned
+        r = a.get(f"{API}/admin/users", params={"status": "banned"})
+        assert r.status_code == 200
+        banned_ids = [u["id"] for u in r.json()]
+        assert uid in banned_ids
+        target = next(u for u in r.json() if u["id"] == uid)
+        assert target["status"] == "banned"
+        assert target.get("ban_reason") == "spam test"
+        assert target.get("banned_at")
+        # Banned user cannot access /posts (require_active blocks)
+        rp = s.get(f"{API}/posts")
+        assert rp.status_code == 403, rp.text
+        # Banned user login attempt
+        s2 = _sess()
+        rl = s2.post(f"{API}/auth/login", json={"email": email, "password": "testpass123"})
+        assert rl.status_code == 403, rl.text
+        try:
+            detail = rl.json().get("detail", "")
+        except Exception:
+            detail = rl.text
+        assert "차단된 계정" in detail, detail
+        # Unban
+        ru = a.post(f"{API}/admin/users/{uid}/unban")
+        assert ru.status_code == 200
+        d = a.get(f"{API}/admin/users/{uid}").json()
+        assert d["user"]["status"] == "active"
+        assert d["user"].get("ban_reason") in (None, "")
+        # Re-login works now
+        s3 = _sess()
+        rl2 = s3.post(f"{API}/auth/login", json={"email": email, "password": "testpass123"})
+        assert rl2.status_code == 200, rl2.text
+
+    def test_ban_nonexistent_user_404(self):
+        a = _admin_session()
+        r = a.post(f"{API}/admin/users/does-not-exist-uid/ban", json={"reason": "n/a"})
+        assert r.status_code == 404
+
+    def test_csv_export_attachment_and_rows(self):
+        a = _admin_session()
+        r = a.get(f"{API}/admin/users/export.csv")
+        assert r.status_code == 200, r.text
+        ctype = r.headers.get("content-type", "")
+        assert "text/csv" in ctype, ctype
+        cdisp = r.headers.get("content-disposition", "")
+        assert "attachment" in cdisp.lower() and ".csv" in cdisp
+        body = r.text
+        lines = body.strip().splitlines()
+        assert len(lines) >= 2  # header + at least admin
+        header = lines[0]
+        for col in ["email", "nickname", "gate", "status", "is_admin", "ban_reason"]:
+            assert col in header, f"missing column {col} in CSV header: {header}"
+        # admin row present
+        assert any(ADMIN_EMAIL in ln for ln in lines[1:])
+
+    def test_csv_export_requires_admin(self):
+        s, email, uid = _register_isu_safe()
+        r = s.get(f"{API}/admin/users/export.csv")
+        assert r.status_code == 403
+
+
+# ============================================================
 # Rate limits — placed LAST because they intentionally exhaust per-IP buckets,
 # which would otherwise poison subsequent tests (they all share the proxy IP).
 class TestZRateLimits:

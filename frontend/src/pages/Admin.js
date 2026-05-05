@@ -8,6 +8,11 @@ export default function Admin() {
   const [keys, setKeys] = useState([]);
   const [logs, setLogs] = useState([]);
   const [board, setBoard] = useState([]);
+  const [users, setUsers] = useState([]);
+  const [userSearch, setUserSearch] = useState("");
+  const [filterStatus, setFilterStatus] = useState("");
+  const [filterGate, setFilterGate] = useState("");
+  const [searching, setSearching] = useState(false);
   const [detail, setDetail] = useState(null);
   const [selected, setSelected] = useState(new Set());
   const [loading, setLoading] = useState(true);
@@ -34,6 +39,57 @@ export default function Admin() {
   };
 
   useEffect(() => { load(); }, []);
+
+  const searchUsers = async () => {
+    setSearching(true);
+    try {
+      const params = new URLSearchParams();
+      if (userSearch) params.set("q", userSearch);
+      if (filterStatus) params.set("status", filterStatus);
+      if (filterGate) params.set("gate", filterGate);
+      params.set("limit", "100");
+      const { data } = await api.get(`/admin/users?${params.toString()}`);
+      setUsers(data);
+    } catch (err) {
+      toast.error(formatApiError(err.response?.data?.detail));
+    } finally {
+      setSearching(false);
+    }
+  };
+
+  useEffect(() => {
+    if (tab === "users") searchUsers();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab]);
+
+  const banUser = async (uid) => {
+    const reason = window.prompt("차단 사유 (선택):", "") ?? null;
+    if (reason === null) return;
+    try {
+      await api.post(`/admin/users/${uid}/ban`, { reason });
+      toast.success("차단 완료");
+      searchUsers();
+      setDetail(null);
+    } catch (err) {
+      toast.error(formatApiError(err.response?.data?.detail));
+    }
+  };
+  const unbanUser = async (uid) => {
+    try {
+      await api.post(`/admin/users/${uid}/unban`);
+      toast.success("차단 해제");
+      searchUsers();
+      setDetail(null);
+    } catch (err) {
+      toast.error(formatApiError(err.response?.data?.detail));
+    }
+  };
+
+  const exportCsv = () => {
+    const url = `${process.env.REACT_APP_BACKEND_URL}/api/admin/users/export.csv`;
+    // Open in new tab; cookies are sent automatically on same-site request
+    window.open(url, "_blank");
+  };
 
   const decide = async (uid, action) => {
     try {
@@ -114,6 +170,7 @@ export default function Admin() {
       <nav className="flex gap-6 border-b border-[var(--line)] flex-wrap">
         {[
           ["pending", `Initiation (${pending.length})`],
+          ["users", "Users"],
           ["keys", `Keys (${keys.length})`],
           ["logs", `Invite Log (${logs.length})`],
           ["board", `Leaderboard (${board.length})`],
@@ -209,6 +266,97 @@ export default function Admin() {
             </div>
           </div>
         )
+      ) : tab === "users" ? (
+        <div data-testid="users-panel" className="space-y-4">
+          <div className="flex gap-2 flex-wrap items-center">
+            <input
+              value={userSearch}
+              onChange={(e) => setUserSearch(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") searchUsers(); }}
+              placeholder="Search email or nickname"
+              className="fp-input flex-1 min-w-[200px]"
+              data-testid="user-search-input"
+            />
+            <select
+              value={filterStatus}
+              onChange={(e) => setFilterStatus(e.target.value)}
+              className="fp-input w-auto bg-[var(--bg)] text-xs fp-mono uppercase tracking-[0.25em]"
+              data-testid="filter-status"
+            >
+              <option value="">All status</option>
+              <option value="active">active</option>
+              <option value="pending_email">pending_email</option>
+              <option value="pending_review">pending_review</option>
+              <option value="rejected">rejected</option>
+              <option value="banned">banned</option>
+            </select>
+            <select
+              value={filterGate}
+              onChange={(e) => setFilterGate(e.target.value)}
+              className="fp-input w-auto bg-[var(--bg)] text-xs fp-mono uppercase tracking-[0.25em]"
+              data-testid="filter-gate"
+            >
+              <option value="">All gates</option>
+              <option value="isu">isu</option>
+              <option value="invite">invite</option>
+            </select>
+            <button onClick={searchUsers} disabled={searching} className="fp-btn" data-testid="search-btn">
+              {searching ? "..." : "Search"}
+            </button>
+            <button onClick={exportCsv} className="fp-btn fp-btn-red" data-testid="export-csv-btn">
+              ⬇ CSV
+            </button>
+          </div>
+
+          {users.length === 0 ? (
+            <div className="py-12 text-center text-xs fp-mono uppercase tracking-[0.3em] text-[var(--text-mute)]">
+              No users.
+            </div>
+          ) : (
+            <div className="divide-y divide-[var(--line)] border-y border-[var(--line)]" data-testid="users-list">
+              {users.map((u) => (
+                <div key={u.id} className="py-4 flex items-start justify-between gap-3 flex-wrap" data-testid={`user-${u.id}`}>
+                  <button onClick={() => openDetail(u.id)} className="flex-1 text-left hover:opacity-80">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-bold text-sm">{u.email}</span>
+                      <span className="text-xs text-[var(--text-mute)]">@{u.nickname}</span>
+                      <span className={`text-[9px] fp-mono uppercase tracking-[0.3em] px-1.5 py-0.5 border ${u.gate === "isu" ? "border-[var(--text-mute)] text-[var(--text-mute)]" : "border-[var(--red)] text-[var(--red)]"}`}>
+                        {u.gate || "—"}
+                      </span>
+                      <span className={`text-[9px] fp-mono uppercase tracking-[0.3em] px-1.5 py-0.5 border ${
+                        u.status === "active" ? "border-[var(--text-dim)] text-[var(--text-dim)]" :
+                        u.status === "banned" ? "border-[var(--red)] bg-[var(--red)]/10 text-[var(--red)]" :
+                        "border-[var(--text-mute)] text-[var(--text-mute)]"
+                      }`}>
+                        {u.status}
+                      </span>
+                      {u.is_admin && <span className="text-[9px] fp-mono uppercase tracking-[0.3em] px-1.5 py-0.5 border border-[var(--red)] text-[var(--red)]">ADMIN</span>}
+                    </div>
+                    <div className="text-[10px] fp-mono uppercase tracking-[0.25em] text-[var(--text-mute)] mt-1">
+                      posts {u.posts_count} · invites {u.invites_count}
+                      {u.recommended_by_nickname && <span> · ←{u.recommended_by_nickname}</span>}
+                      {u.ban_reason && <span className="text-[var(--red)]"> · banned: {u.ban_reason}</span>}
+                    </div>
+                  </button>
+                  <div className="flex gap-2">
+                    {u.status === "pending_review" && (
+                      <>
+                        <button onClick={() => decide(u.id, "approve")} className="fp-btn text-xs" data-testid={`u-approve-${u.id}`}>Approve</button>
+                        <button onClick={() => decide(u.id, "reject")} className="fp-btn fp-btn-red text-xs" data-testid={`u-reject-${u.id}`}>Reject</button>
+                      </>
+                    )}
+                    {u.status === "banned" && (
+                      <button onClick={() => unbanUser(u.id)} className="fp-btn text-xs" data-testid={`unban-${u.id}`}>Unban</button>
+                    )}
+                    {u.status !== "banned" && !u.is_admin && (
+                      <button onClick={() => banUser(u.id)} className="fp-btn fp-btn-red text-xs" data-testid={`ban-${u.id}`}>Ban</button>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       ) : tab === "keys" ? (
         <div className="divide-y divide-[var(--line)] border-y border-[var(--line)]" data-testid="keys-list">
           {keys.map((k) => (
@@ -339,12 +487,17 @@ export default function Admin() {
               )}
             </div>
 
-            <div className="flex gap-2 pt-2">
+            <div className="flex gap-2 pt-2 flex-wrap">
               {detail.user.status === "pending_review" && (
                 <>
                   <button onClick={() => decide(detail.user.id, "approve")} className="fp-btn flex-1" data-testid="modal-approve">Approve</button>
                   <button onClick={() => decide(detail.user.id, "reject")} className="fp-btn fp-btn-red flex-1" data-testid="modal-reject">Reject</button>
                 </>
+              )}
+              {detail.user.status === "banned" ? (
+                <button onClick={() => unbanUser(detail.user.id)} className="fp-btn" data-testid="modal-unban">Unban</button>
+              ) : !detail.user.is_admin && (
+                <button onClick={() => banUser(detail.user.id)} className="fp-btn fp-btn-red" data-testid="modal-ban">Ban</button>
               )}
               <button onClick={() => setDetail(null)} className="fp-btn" data-testid="modal-close">Close</button>
             </div>

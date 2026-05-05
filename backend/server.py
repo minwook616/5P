@@ -10,6 +10,8 @@ import uuid
 import random
 import secrets
 import hashlib
+import io
+import csv
 import bcrypt
 import jwt
 from datetime import datetime, timezone, timedelta
@@ -17,6 +19,7 @@ from typing import Optional
 from zoneinfo import ZoneInfo
 
 from fastapi import FastAPI, APIRouter, HTTPException, Request, Response, Depends
+from fastapi.responses import StreamingResponse
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 from pydantic import BaseModel, Field, EmailStr
@@ -243,6 +246,10 @@ class AdminBoostIn(BaseModel):
     boost: int = Field(ge=0, le=10000)
 
 
+class BanIn(BaseModel):
+    reason: str = Field(default="", max_length=300)
+
+
 def email_allowed(email: str) -> bool:
     return email.lower().endswith(f"@{ALLOWED_DOMAIN}")
 
@@ -420,6 +427,8 @@ async def login(request: Request, body: LoginIn, response: Response):
     u = await db.users.find_one({"email": email}, {"_id": 0})
     if not u or not verify_password(body.password, u["password_hash"]):
         raise HTTPException(401, "이메일 또는 비밀번호가 올바르지 않습니다.")
+    if u.get("status") == "banned":
+        raise HTTPException(403, "차단된 계정입니다.")
     set_auth_cookies(response, create_access_token(u["id"], u["email"]), create_refresh_token(u["id"]))
     return {"user": public_user(u)}
 
@@ -1027,6 +1036,126 @@ async def admin_invite_leaderboard(_: dict = Depends(require_admin)):
     rows = await db.invite_logs.aggregate(pipeline).to_list(20)
     return [{"recommender_id": r["_id"], "nickname": r.get("nickname"),
              "email": r.get("email"), "invites": r["invites"]} for r in rows]
+
+
+# ---------------- Admin User Management (Search / Ban / Export) ----------------
+@api.get("/admin/users")
+async def admin_user_search(
+    q: str = "",
+    status: Optional[str] = None,
+    gate: Optional[str] = None,
+    limit: int = 50,
+    _: dict = Depends(require_admin),
+):
+    """Search users by email or nickname; optional status/gate filters."""
+    query: dict = {}
+    q = (q or "").strip()
+    if q:
+        # escape regex special chars
+        import re
+        pat = re.escape(q)
+        query["$or"] = [
+            {"email": {"$regex": pat, "$options": "i"}},
+            {"nickname": {"$regex": pat, "$options": "i"}},
+        ]
+    if status:
+        query["status"] = status
+    if gate:
+        query["gate"] = gate
+    cursor = db.users.find(query, {"_id": 0, "password_hash": 0}).sort("created_at", -1).limit(min(limit, 200))
+    items = await cursor.to_list(min(limit, 200))
+    for u in items:
+        u["posts_count"] = await db.posts.count_documents({"author_id": u["id"]})
+        u["invites_count"] = await db.invite_logs.count_documents({"recommender_id": u["id"]})
+        rid = u.get("recommended_by")
+        if rid:
+            r = await db.users.find_one({"id": rid}, {"_id": 0, "email": 1, "nickname": 1})
+            if r:
+                u["recommended_by_email"] = r["email"]
+                u["recommended_by_nickname"] = r.get("nickname") or derive_nickname(r["email"])
+    return items
+
+
+@api.post("/admin/users/{uid}/ban")
+async def admin_ban(uid: str, body: BanIn, admin: dict = Depends(require_admin)):
+    u = await db.users.find_one({"id": uid}, {"_id": 0})
+    if not u:
+        raise HTTPException(404, "사용자를 찾을 수 없습니다.")
+    if u.get("is_admin"):
+        raise HTTPException(403, "운영자는 차단할 수 없습니다.")
+    if u["id"] == admin["id"]:
+        raise HTTPException(403, "자기 자신을 차단할 수 없습니다.")
+    await db.users.update_one(
+        {"id": uid},
+        {"$set": {
+            "status": "banned",
+            "banned_at": now_utc().isoformat(),
+            "ban_reason": body.reason or "",
+            "banned_by": admin["id"],
+        }},
+    )
+    return {"ok": True}
+
+
+@api.post("/admin/users/{uid}/unban")
+async def admin_unban(uid: str, _: dict = Depends(require_admin)):
+    u = await db.users.find_one({"id": uid}, {"_id": 0})
+    if not u:
+        raise HTTPException(404, "사용자를 찾을 수 없습니다.")
+    await db.users.update_one(
+        {"id": uid},
+        {"$set": {"status": "active"},
+         "$unset": {"banned_at": "", "ban_reason": "", "banned_by": ""}},
+    )
+    return {"ok": True}
+
+
+@api.get("/admin/users/export.csv")
+async def admin_export_csv(_: dict = Depends(require_admin)):
+    """CSV export of all users for offline management."""
+    cursor = db.users.find({}, {"_id": 0, "password_hash": 0}).sort("created_at", 1)
+    users = await cursor.to_list(10000)
+
+    # Pre-fetch recommender info to avoid N queries
+    rec_ids = {u["recommended_by"] for u in users if u.get("recommended_by")}
+    recs = {}
+    if rec_ids:
+        async for r in db.users.find({"id": {"$in": list(rec_ids)}}, {"_id": 0, "id": 1, "email": 1, "nickname": 1}):
+            recs[r["id"]] = r
+
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow([
+        "email", "nickname", "gate", "status", "is_admin", "key_granted",
+        "recommended_by_email", "recommended_by_nickname",
+        "created_at", "email_verified_at", "reviewed_at",
+        "banned_at", "ban_reason",
+    ])
+    for u in users:
+        rid = u.get("recommended_by")
+        rec = recs.get(rid) if rid else None
+        writer.writerow([
+            u.get("email", ""),
+            u.get("nickname") or derive_nickname(u.get("email", "")),
+            u.get("gate", ""),
+            u.get("status", ""),
+            "true" if u.get("is_admin") else "false",
+            "true" if u.get("key_granted") else "false",
+            rec["email"] if rec else "",
+            (rec.get("nickname") if rec else "") or "",
+            u.get("created_at", ""),
+            u.get("email_verified_at", "") or "",
+            u.get("reviewed_at", "") or "",
+            u.get("banned_at", "") or "",
+            u.get("ban_reason", "") or "",
+        ])
+    output.seek(0)
+    filename = f"5p_users_{datetime.now(TZ).strftime('%Y%m%d_%H%M%S')}.csv"
+    return StreamingResponse(
+        iter([output.getvalue()]),
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 @api.get("/admin/users/{uid}")
