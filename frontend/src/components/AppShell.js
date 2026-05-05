@@ -1,6 +1,5 @@
 import { Outlet, NavLink, useNavigate } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
-import { Home, MessageCircle, PlusSquare, User, LogOut, Flame } from "lucide-react";
 
 export default function AppShell() {
   const { user, logout } = useAuth();
@@ -11,88 +10,62 @@ export default function AppShell() {
     navigate("/");
   };
 
-  const navItem = (to, label, Icon, testid) => (
+  const link = (to, label, testid) => (
     <NavLink
       to={to}
       data-testid={testid}
       className={({ isActive }) =>
-        `flex items-center gap-3 px-4 py-3 rounded-xl border-2 border-[#1A1A1A] font-bold transition-all ${
-          isActive
-            ? "bg-[#FDE047] nb-shadow-xs"
-            : "bg-white hover:bg-[#F3F2EE]"
+        `block py-2 text-xs uppercase tracking-[0.25em] fp-mono transition-colors ${
+          isActive ? "text-[var(--text)]" : "text-[var(--text-mute)] hover:text-[var(--text-dim)]"
         }`
       }
       end
     >
-      <Icon size={20} strokeWidth={2.5} />
-      <span>{label}</span>
+      {label}
     </NavLink>
   );
 
   return (
-    <div className="min-h-screen bg-[#FAF9F6]">
-      {/* Top bar */}
-      <header className="sticky top-0 z-40 bg-[#FAF9F6] border-b-2 border-[#1A1A1A]">
-        <div className="max-w-6xl mx-auto px-4 md:px-6 h-16 flex items-center justify-between">
+    <div className="min-h-screen bg-[var(--bg)] text-[var(--text)]">
+      {/* Top minimal bar */}
+      <header className="border-b border-[var(--line)]">
+        <div className="max-w-5xl mx-auto px-6 h-14 flex items-center justify-between">
           <div
-            className="flex items-center gap-2 cursor-pointer"
             onClick={() => navigate("/feed")}
+            className="cursor-pointer flex items-center gap-2"
             data-testid="brand-logo"
           >
-            <div className="w-9 h-9 bg-[#FF5E5B] border-2 border-[#1A1A1A] rounded-lg flex items-center justify-center nb-shadow-xs">
-              <Flame size={20} color="#fff" strokeWidth={2.8} />
-            </div>
-            <span className="font-display font-black text-xl tracking-tight">CampusTalk</span>
+            <span className="font-bold text-base tracking-tight">5P</span>
+            <span className="fp-dot" />
           </div>
-          <div className="flex items-center gap-2">
-            <span className="hidden sm:inline text-sm font-semibold text-[#4B5563]" data-testid="current-nickname">
-              @{user?.nickname}
-            </span>
-            <button
-              onClick={handleLogout}
-              className="nb-btn nb-btn-white text-sm"
-              data-testid="logout-btn"
-            >
-              <LogOut size={16} className="mr-1.5" strokeWidth={2.5} />
-              로그아웃
+          <div className="flex items-center gap-5 text-xs uppercase tracking-[0.25em] fp-mono">
+            {user?.is_admin && <span className="text-[var(--red)]" data-testid="admin-badge">ADMIN</span>}
+            <span className="text-[var(--text-mute)]" data-testid="user-email">{user?.email}</span>
+            <button onClick={handleLogout} className="text-[var(--text-dim)] hover:text-[var(--text)]" data-testid="logout-btn">
+              Logout
             </button>
           </div>
         </div>
       </header>
 
-      <div className="max-w-6xl mx-auto px-4 md:px-6 py-6 md:py-8">
-        <div className="grid grid-cols-1 md:grid-cols-12 gap-6 md:gap-8">
-          {/* Sidebar */}
-          <aside className="md:col-span-3 space-y-3">
-            <div className="nb-card p-4 space-y-2">
-              {navItem("/feed", "피드", Home, "nav-feed")}
-              {navItem("/post/new", "글쓰기", PlusSquare, "nav-new-post")}
-              {navItem("/messages", "쪽지", MessageCircle, "nav-messages")}
-              {navItem("/profile", "내 정보", User, "nav-profile")}
+      <div className="max-w-5xl mx-auto px-6 py-8 grid grid-cols-1 md:grid-cols-12 gap-10">
+        <aside className="md:col-span-3 space-y-1">
+          {link("/feed", "Feed", "nav-feed")}
+          {link("/post/new", "Compose", "nav-new")}
+          {link("/messages", "Messages", "nav-messages")}
+          {link("/profile", "Profile", "nav-profile")}
+          <div className="pt-8">
+            <div className="text-[10px] uppercase tracking-[0.3em] text-[var(--text-mute)] fp-mono">Slogan</div>
+            <div className="text-xs text-[var(--text-dim)] mt-2 leading-relaxed">
+              5 Stories,<br/>5 People,<br/>Once a day.
             </div>
-            <div className="nb-card p-4 bg-[#A7F3D0]">
-              <div className="font-display font-black text-sm uppercase tracking-wider mb-1">오늘의 한 마디</div>
-              <p className="text-sm font-semibold leading-relaxed">
-                오늘도 하루 <span className="font-black">5개</span>까지 게시글을 쓸 수 있어요.
-                신중하게 써봐요 🌱
-              </p>
-            </div>
-          </aside>
+          </div>
+        </aside>
 
-          {/* Main */}
-          <main className="md:col-span-9 animate-fade-up">
-            <Outlet />
-          </main>
-        </div>
+        <main className="md:col-span-9 fp-fade">
+          <Outlet />
+        </main>
       </div>
-
-      {/* Mobile bottom nav */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t-2 border-[#1A1A1A] flex justify-around py-2 z-50">
-        <NavLink to="/feed" data-testid="mnav-feed" className={({isActive})=>`p-3 rounded-lg ${isActive?"bg-[#FDE047]":""}`}><Home size={22}/></NavLink>
-        <NavLink to="/post/new" data-testid="mnav-new" className={({isActive})=>`p-3 rounded-lg ${isActive?"bg-[#FDE047]":""}`}><PlusSquare size={22}/></NavLink>
-        <NavLink to="/messages" data-testid="mnav-messages" className={({isActive})=>`p-3 rounded-lg ${isActive?"bg-[#FDE047]":""}`}><MessageCircle size={22}/></NavLink>
-        <NavLink to="/profile" data-testid="mnav-profile" className={({isActive})=>`p-3 rounded-lg ${isActive?"bg-[#FDE047]":""}`}><User size={22}/></NavLink>
-      </nav>
     </div>
   );
 }

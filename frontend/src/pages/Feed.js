@@ -1,175 +1,218 @@
 import { useEffect, useState, useCallback } from "react";
-import { useNavigate, useParams, Link } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import api, { formatApiError } from "@/lib/api";
-import { Heart, MessageSquare, Eye, Plus } from "lucide-react";
 import { toast } from "sonner";
-
-const CATEGORIES = [
-  { key: "all", label: "전체", color: "bg-white" },
-  { key: "free", label: "자유", color: "bg-[#A7F3D0]" },
-  { key: "secret", label: "비밀", color: "bg-[#B8B8FF]" },
-  { key: "info", label: "정보", color: "bg-[#FDE047]" },
-  { key: "question", label: "질문", color: "bg-[#FFC7A7]" },
-];
+import { useAuth } from "@/context/AuthContext";
 
 export default function Feed() {
-  const { category } = useParams();
-  const active = category || "all";
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const [status, setStatus] = useState(null);
   const [posts, setPosts] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [quota, setQuota] = useState({ used: 0, limit: 5, remaining: 5 });
+  const [now, setNow] = useState(Date.now());
 
   const load = useCallback(async () => {
-    setLoading(true);
     try {
-      const [postsRes, quotaRes] = await Promise.all([
-        api.get("/posts", { params: active !== "all" ? { category: active } : {} }),
-        api.get("/posts/quota"),
-      ]);
-      setPosts(postsRes.data);
-      setQuota(quotaRes.data);
+      const [s, p] = await Promise.all([api.get("/status/today"), api.get("/posts")]);
+      setStatus(s.data);
+      setPosts(p.data);
     } catch (err) {
       toast.error(formatApiError(err.response?.data?.detail));
     } finally {
       setLoading(false);
     }
-  }, [active]);
+  }, []);
 
   useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, []);
 
   const toggleLike = async (id, e) => {
     e.stopPropagation();
     try {
       const { data } = await api.post(`/posts/${id}/like`);
-      setPosts((ps) => ps.map((p) => p.id === id ? { ...p, liked_by_me: data.liked, like_count: data.like_count } : p));
+      setPosts((ps) => ps.map((x) => x.id === id ? { ...x, liked_by_me: data.liked, like_count: data.like_count } : x));
     } catch (err) {
       toast.error(formatApiError(err.response?.data?.detail));
     }
   };
 
+  if (loading || !status) {
+    return <div className="text-xs uppercase tracking-[0.3em] fp-mono text-[var(--text-mute)]">Loading.</div>;
+  }
+
   return (
-    <div className="space-y-6">
-      {/* Quota card */}
-      <div className="nb-card p-5 flex items-center justify-between gap-4" data-testid="quota-card">
-        <div className="flex-1">
-          <div className="text-xs font-black uppercase tracking-wider text-[#4B5563] mb-1">오늘의 글쓰기 할당량</div>
-          <div className="flex items-baseline gap-2">
-            <span className="font-display text-3xl font-black" data-testid="quota-remaining">{quota.remaining}</span>
-            <span className="text-sm font-bold text-[#4B5563]">/ {quota.limit}개 남음</span>
-          </div>
-          <div className="mt-3 h-3 bg-[#F3F2EE] border-2 border-[#1A1A1A] rounded-full overflow-hidden">
-            <div
-              className="h-full bg-[#FF5E5B] transition-all"
-              style={{ width: `${(quota.used / quota.limit) * 100}%` }}
-            />
-          </div>
-        </div>
-        <button
-          onClick={() => navigate("/post/new")}
-          disabled={quota.remaining === 0}
-          className="nb-btn nb-btn-primary whitespace-nowrap"
-          data-testid="write-post-btn"
-        >
-          <Plus size={18} strokeWidth={2.8} className="mr-1"/>
-          글쓰기
-        </button>
-      </div>
+    <div className="space-y-12">
+      {/* Today header */}
+      <SlotHeader status={status} now={now} onCompose={() => navigate("/post/new")} />
 
-      {/* Category tabs */}
-      <div className="flex flex-wrap gap-2" data-testid="category-tabs">
-        {CATEGORIES.map((c) => (
-          <Link
-            key={c.key}
-            to={c.key === "all" ? "/feed" : `/feed/${c.key}`}
-            data-testid={`category-${c.key}`}
-            className={`px-4 py-2 border-2 border-[#1A1A1A] rounded-full font-bold text-sm transition-all ${
-              active === c.key
-                ? `${c.color} nb-shadow-xs`
-                : "bg-white hover:bg-[#F3F2EE]"
-            }`}
-          >
-            {c.label}
-          </Link>
-        ))}
-      </div>
-
-      {/* Posts */}
-      {loading ? (
-        <div className="nb-card p-10 text-center font-bold">로딩중...</div>
-      ) : posts.length === 0 ? (
-        <div className="nb-card p-10 text-center">
-          <p className="font-display font-black text-xl mb-2">아직 글이 없어요</p>
-          <p className="text-sm font-medium text-[#4B5563] mb-4">첫 번째 글을 남겨볼까요?</p>
-          <button onClick={() => navigate("/post/new")} className="nb-btn nb-btn-primary" data-testid="empty-write-btn">
-            첫 글쓰기
-          </button>
+      {/* Posts list */}
+      <section>
+        <div className="flex items-center justify-between mb-4">
+          <div className="text-[10px] uppercase tracking-[0.3em] fp-mono text-[var(--text-mute)]">
+            Today's Five
+          </div>
+          {user?.is_admin && (
+            <div className="text-[10px] uppercase tracking-[0.3em] fp-mono text-[var(--red)]">Admin View · names visible</div>
+          )}
         </div>
-      ) : (
-        <div className="space-y-4" data-testid="posts-list">
-          {posts.map((p) => (
-            <div
-              key={p.id}
-              onClick={() => navigate(`/post/${p.id}`)}
-              className="nb-card p-5 cursor-pointer"
-              data-testid={`post-card-${p.id}`}
-            >
-              <div className="flex items-center gap-2 mb-2">
-                <CategoryBadge cat={p.category} />
-                <span className="text-xs font-bold text-[#4B5563]">{p.author_nickname}</span>
-                <span className="text-xs text-[#9CA3AF]">·</span>
-                <span className="text-xs font-semibold text-[#4B5563]">{timeAgo(p.created_at)}</span>
-              </div>
-              <h3 className="font-display font-black text-lg mb-1.5">{p.title}</h3>
-              <p className="text-sm font-medium text-[#4B5563] line-clamp-2 leading-relaxed">{p.content}</p>
-              <div className="flex items-center gap-4 mt-3 pt-3 border-t border-dashed border-[#D1D5DB]">
-                <button
-                  onClick={(e) => toggleLike(p.id, e)}
-                  className={`flex items-center gap-1 text-sm font-bold ${p.liked_by_me ? "text-[#FF5E5B]" : "text-[#4B5563]"}`}
-                  data-testid={`like-btn-${p.id}`}
-                >
-                  <Heart size={16} fill={p.liked_by_me ? "#FF5E5B" : "none"} strokeWidth={2.5}/>
-                  {p.like_count}
-                </button>
-                <span className="flex items-center gap-1 text-sm font-bold text-[#4B5563]">
-                  <MessageSquare size={16} strokeWidth={2.5}/> {p.comment_count}
-                </span>
-                <span className="flex items-center gap-1 text-sm font-bold text-[#4B5563]">
-                  <Eye size={16} strokeWidth={2.5}/> {p.views}
-                </span>
-              </div>
+
+        {posts.length === 0 ? (
+          <div className="py-16 text-center">
+            <div className="fp-mono text-xs uppercase tracking-[0.3em] text-[var(--text-mute)]">
+              No stories yet.
             </div>
-          ))}
-        </div>
-      )}
+          </div>
+        ) : (
+          <div className="divide-y divide-[var(--line)] border-y border-[var(--line)]" data-testid="posts-list">
+            {posts.map((p) => (
+              <article
+                key={p.id}
+                onClick={() => navigate(`/post/${p.id}`)}
+                className="py-6 cursor-pointer group"
+                data-testid={`post-${p.id}`}
+              >
+                <div className="flex items-center gap-3 text-[10px] uppercase tracking-[0.3em] fp-mono text-[var(--text-mute)] mb-3">
+                  <span>{p.is_admin_post ? <span className="text-[var(--red)]">{p.author_label}</span> : p.author_label}</span>
+                  <span>·</span>
+                  <span>{relTime(p.created_at)}</span>
+                  {p.blinded && <><span>·</span><span className="text-[var(--red)]">Blinded</span></>}
+                </div>
+                <div className={p.blinded && !user?.is_admin ? "fp-blinded" : ""}>
+                  <h3 className="text-xl font-bold tracking-tight group-hover:text-[var(--text)] text-[var(--text)] mb-2">
+                    {p.title}
+                  </h3>
+                  <p className="text-sm text-[var(--text-dim)] line-clamp-2 leading-relaxed">{p.content}</p>
+                </div>
+                <div className="mt-4 flex items-center gap-6 text-[10px] uppercase tracking-[0.3em] fp-mono text-[var(--text-mute)]">
+                  <button
+                    onClick={(e)=>toggleLike(p.id, e)}
+                    className={`hover:text-[var(--text)] flex items-center gap-2 ${p.liked_by_me ? "text-[var(--red)]" : ""}`}
+                    data-testid={`like-${p.id}`}
+                  >
+                    {p.liked_by_me && <span className="fp-dot"/>}
+                    Like {p.like_count}
+                  </button>
+                  <span>Comment {p.comment_count}</span>
+                </div>
+              </article>
+            ))}
+          </div>
+        )}
+      </section>
     </div>
   );
 }
 
-export function CategoryBadge({ cat }) {
-  const map = {
-    free: { label: "자유", cls: "bg-[#A7F3D0]" },
-    secret: { label: "비밀", cls: "bg-[#B8B8FF]" },
-    info: { label: "정보", cls: "bg-[#FDE047]" },
-    question: { label: "질문", cls: "bg-[#FFC7A7]" },
-  };
-  const c = map[cat] || { label: cat, cls: "bg-white" };
+function SlotHeader({ status, now, onCompose }) {
+  const slots = status.server_limit;
+  const used = status.server_used;
+  const available = status.available_slots;
+
+  let headlineState = "OPEN";
+  if (status.spectator_mode) headlineState = "FULL";
+  else if (status.user_posted_today && !status.is_admin) headlineState = "DONE";
+  else if (!status.can_post_now && status.block_reason === "GOLDEN_HOUR_LOCKED") headlineState = "WAITING";
+
+  const unlockMs = new Date(status.unlock_at).getTime();
+  const remaining = Math.max(0, unlockMs - now);
+  const remainSec = Math.floor(remaining / 1000);
+  const hh = String(Math.floor(remainSec / 3600)).padStart(2, "0");
+  const mm = String(Math.floor((remainSec % 3600) / 60)).padStart(2, "0");
+  const ss = String(remainSec % 60).padStart(2, "0");
+
   return (
-    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-black uppercase tracking-wider border-2 border-[#1A1A1A] ${c.cls}`}>
-      {c.label}
-    </span>
+    <section data-testid="slot-header">
+      <div className="text-[10px] uppercase tracking-[0.4em] fp-mono text-[var(--text-mute)] mb-3">
+        {status.today_key}
+      </div>
+      <div className="flex items-baseline gap-4 flex-wrap">
+        <h1 className="font-bold text-5xl sm:text-6xl tracking-tighter" data-testid="available-headline">
+          AVAILABLE<span className="text-[var(--red)]">:</span> {available}/{slots}
+        </h1>
+        {status.is_champion && (
+          <span className="text-[10px] uppercase tracking-[0.4em] fp-mono text-[var(--red)] border border-[var(--red)] px-2 py-1" data-testid="champion-badge">
+            Champion · Priority Access
+          </span>
+        )}
+        {status.is_admin && (
+          <span className="text-[10px] uppercase tracking-[0.4em] fp-mono text-[var(--red)] border border-[var(--red)] px-2 py-1" data-testid="admin-flag">
+            Admin · {status.admin_daily_limit}/day
+          </span>
+        )}
+      </div>
+
+      <div className="mt-6 grid grid-cols-5 gap-2" data-testid="slot-grid">
+        {Array.from({ length: slots }).map((_, i) => {
+          const filled = i < used;
+          return (
+            <div
+              key={i}
+              className={`h-1 ${filled ? "bg-[var(--red)]" : "bg-[var(--line-strong)]"}`}
+              data-testid={`slot-${i}-${filled ? "filled" : "empty"}`}
+            />
+          );
+        })}
+      </div>
+
+      <div className="mt-8 border-t border-[var(--line)] pt-6">
+        {status.spectator_mode && !status.is_admin && (
+          <div data-testid="state-spectator">
+            <div className="text-[10px] uppercase tracking-[0.4em] fp-mono text-[var(--red)] mb-2">Spectator Mode</div>
+            <div className="text-base text-[var(--text-dim)]">오늘의 기회는 모두 소진되었습니다.</div>
+          </div>
+        )}
+        {status.user_posted_today && !status.is_admin && (
+          <div data-testid="state-done">
+            <div className="text-[10px] uppercase tracking-[0.4em] fp-mono text-[var(--text-mute)] mb-2">Today is Done</div>
+            <div className="text-base text-[var(--text-dim)]">오늘은 이미 작성하셨습니다. 내일 다시 만나요.</div>
+          </div>
+        )}
+        {!status.spectator_mode && !status.user_posted_today && !status.can_post_now && status.block_reason === "GOLDEN_HOUR_LOCKED" && (
+          <div data-testid="state-waiting">
+            <div className="text-[10px] uppercase tracking-[0.4em] fp-mono text-[var(--text-mute)] mb-2">Golden Hour</div>
+            <div className="text-2xl fp-mono tracking-widest" data-testid="countdown">
+              {hh}:{mm}:{ss}
+            </div>
+            <div className="text-xs text-[var(--text-mute)] mt-2 fp-mono uppercase tracking-[0.2em]">
+              Unlock at random within window. Stay close.
+            </div>
+          </div>
+        )}
+        {status.can_post_now && (
+          <div className="flex items-center justify-between gap-4 flex-wrap" data-testid="state-can-post">
+            <div>
+              <div className="text-[10px] uppercase tracking-[0.4em] fp-mono text-[var(--red)] mb-2 flex items-center gap-2">
+                <span className="fp-dot"/> Now Open
+              </div>
+              <div className="text-base text-[var(--text-dim)]">한 번 클릭하면 끝. 신중하게.</div>
+            </div>
+            <button onClick={onCompose} className="fp-btn fp-btn-red" data-testid="compose-btn">
+              Compose
+            </button>
+          </div>
+        )}
+        {status.is_admin && status.block_reason === "ADMIN_LIMIT" && (
+          <div data-testid="state-admin-limit">
+            <div className="text-base text-[var(--text-dim)]">운영자 일일 한도({status.admin_daily_limit}개)에 도달했습니다.</div>
+          </div>
+        )}
+      </div>
+    </section>
   );
 }
 
-export function timeAgo(iso) {
+export function relTime(iso) {
   const t = new Date(iso).getTime();
   const diff = Date.now() - t;
   const m = Math.floor(diff / 60000);
-  if (m < 1) return "방금";
-  if (m < 60) return `${m}분 전`;
+  if (m < 1) return "Just now";
+  if (m < 60) return `${m}m`;
   const h = Math.floor(m / 60);
-  if (h < 24) return `${h}시간 전`;
+  if (h < 24) return `${h}h`;
   const d = Math.floor(h / 24);
-  if (d < 7) return `${d}일 전`;
-  return new Date(iso).toLocaleDateString("ko-KR");
+  return `${d}d`;
 }

@@ -2,193 +2,143 @@ import { useEffect, useState, useCallback, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import api, { formatApiError } from "@/lib/api";
 import { toast } from "sonner";
-import { Send, Search, ArrowLeft, MessageCircle } from "lucide-react";
-import { timeAgo } from "@/pages/Feed";
+import { relTime } from "@/pages/Feed";
 
 export default function Messages() {
-  const { otherId } = useParams();
+  const { convId } = useParams();
   const navigate = useNavigate();
   const [conversations, setConversations] = useState([]);
   const [thread, setThread] = useState(null);
   const [text, setText] = useState("");
-  const [searchQ, setSearchQ] = useState("");
-  const [searchResults, setSearchResults] = useState([]);
-  const [loading, setLoading] = useState(true);
   const bottomRef = useRef(null);
 
-  const loadConversations = useCallback(async () => {
+  const loadConvs = useCallback(async () => {
     try {
       const { data } = await api.get("/messages/conversations");
       setConversations(data);
     } catch (err) {
       toast.error(formatApiError(err.response?.data?.detail));
-    } finally {
-      setLoading(false);
     }
   }, []);
 
   const loadThread = useCallback(async () => {
-    if (!otherId) { setThread(null); return; }
+    if (!convId) { setThread(null); return; }
     try {
-      const { data } = await api.get(`/messages/${otherId}`);
+      const { data } = await api.get(`/messages/${convId}`);
       setThread(data);
       setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: "smooth" }), 50);
     } catch (err) {
       toast.error(formatApiError(err.response?.data?.detail));
     }
-  }, [otherId]);
+  }, [convId]);
 
-  useEffect(() => { loadConversations(); }, [loadConversations]);
+  useEffect(() => { loadConvs(); }, [loadConvs]);
   useEffect(() => { loadThread(); }, [loadThread]);
 
   const send = async (e) => {
     e.preventDefault();
-    if (!text.trim() || !otherId) return;
+    if (!text.trim() || !thread) return;
     try {
-      const { data } = await api.post("/messages", { recipient_id: otherId, content: text });
+      const baseCid = convId.replace("::admin_line", "");
+      const parts = baseCid.split("__");
+      // recipient_id = the other party from conv_id
+      const recipient = parts[0]; // we pass conv_id sided; but server uses recipient_id directly
+      // We need real recipient id; pass other_user_id via thread (we don't have it). Use first id that's not the user. We'll fetch via /me to filter.
+      const meRes = await api.get("/auth/me");
+      const me = meRes.data;
+      const r = parts[0] === me.id ? parts[1] : parts[0];
+      const { data } = await api.post("/messages", { recipient_id: r, content: text });
       setThread((t) => t ? { ...t, messages: [...t.messages, data] } : t);
       setText("");
       setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: "smooth" }), 50);
-      loadConversations();
+      loadConvs();
     } catch (err) {
       toast.error(formatApiError(err.response?.data?.detail));
     }
   };
 
-  const doSearch = async (q) => {
-    setSearchQ(q);
-    if (!q.trim()) { setSearchResults([]); return; }
-    try {
-      const { data } = await api.get("/users/search", { params: { q } });
-      setSearchResults(data);
-    } catch {
-      setSearchResults([]);
-    }
-  };
-
   return (
-    <div className="grid md:grid-cols-12 gap-4">
-      {/* Conversations list */}
-      <div className={`md:col-span-5 nb-card p-4 ${otherId ? "hidden md:block" : ""}`} data-testid="conversations-panel">
-        <h2 className="font-display text-xl font-black tracking-tight mb-3">쪽지함</h2>
-
-        {/* Search */}
-        <div className="mb-3">
-          <div className="relative">
-            <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#4B5563]" />
-            <input
-              value={searchQ}
-              onChange={(e) => doSearch(e.target.value)}
-              placeholder="닉네임으로 유저 찾기"
-              className="nb-input pl-9 text-sm"
-              data-testid="user-search-input"
-            />
-          </div>
-          {searchResults.length > 0 && (
-            <div className="mt-2 space-y-1" data-testid="search-results">
-              {searchResults.map((u) => (
-                <button
-                  key={u.id}
-                  onClick={() => { setSearchQ(""); setSearchResults([]); navigate(`/messages/${u.id}`); }}
-                  className="w-full text-left p-2 rounded-lg hover:bg-[#F3F2EE] font-bold text-sm border border-dashed border-[#D1D5DB]"
-                  data-testid={`search-result-${u.id}`}
-                >
-                  @{u.nickname}
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {loading ? (
-          <div className="text-center py-6 font-bold text-sm">로딩중...</div>
-        ) : conversations.length === 0 ? (
-          <div className="text-center py-10 text-sm font-semibold text-[#4B5563]">
-            <MessageCircle size={36} className="mx-auto mb-2 opacity-50"/>
-            아직 쪽지가 없어요<br/>
-            위에서 유저를 검색해 시작해보세요
+    <div className="grid grid-cols-1 md:grid-cols-12 gap-8">
+      <aside className={`md:col-span-4 ${convId ? "hidden md:block" : ""}`}>
+        <div className="text-[10px] uppercase tracking-[0.4em] fp-mono text-[var(--text-mute)] mb-4">Inbox</div>
+        {conversations.length === 0 ? (
+          <div className="text-xs fp-mono uppercase tracking-[0.3em] text-[var(--text-mute)] py-8">
+            No threads
           </div>
         ) : (
-          <div className="space-y-2">
+          <div className="divide-y divide-[var(--line)] border-y border-[var(--line)]" data-testid="conv-list">
             {conversations.map((c) => (
               <button
                 key={c.conv_id}
-                onClick={() => navigate(`/messages/${c.other_user.id}`)}
-                className={`w-full text-left p-3 rounded-xl border-2 border-[#1A1A1A] transition-all ${
-                  otherId === c.other_user.id ? "bg-[#FDE047] nb-shadow-xs" : "bg-white hover:bg-[#F3F2EE]"
-                }`}
-                data-testid={`conv-${c.other_user.id}`}
+                onClick={() => navigate(`/messages/${c.conv_id}`)}
+                className={`w-full text-left py-4 group ${convId === c.conv_id ? "" : ""}`}
+                data-testid={`conv-${c.conv_id}`}
               >
                 <div className="flex items-center justify-between mb-1">
-                  <span className="font-bold text-sm">@{c.other_user.nickname}</span>
-                  <div className="flex items-center gap-1.5">
-                    {c.unread > 0 && (
-                      <span className="px-2 py-0.5 bg-[#FF5E5B] text-white text-xs font-black rounded-full border-2 border-[#1A1A1A]">
-                        {c.unread}
-                      </span>
-                    )}
-                    <span className="text-xs font-semibold text-[#4B5563]">{timeAgo(c.last_at)}</span>
-                  </div>
+                  <span className={`text-xs fp-mono uppercase tracking-[0.25em] ${c.is_admin_line ? "text-[var(--red)]" : "text-[var(--text)]"}`}>
+                    {c.label}
+                  </span>
+                  <span className="flex items-center gap-2 text-[10px] fp-mono text-[var(--text-mute)]">
+                    {c.unread > 0 && <span className="fp-dot"/>}
+                    {relTime(c.last_at)}
+                  </span>
                 </div>
-                <p className="text-xs font-medium text-[#4B5563] truncate">{c.last_message}</p>
+                <div className="text-xs text-[var(--text-dim)] truncate">{c.last_message}</div>
               </button>
             ))}
           </div>
         )}
-      </div>
+      </aside>
 
-      {/* Thread view */}
-      <div className={`md:col-span-7 nb-card p-4 flex flex-col ${otherId ? "" : "hidden md:flex"}`} style={{ minHeight: 520 }} data-testid="thread-panel">
+      <section className={`md:col-span-8 ${convId ? "" : "hidden md:block"}`}>
         {!thread ? (
-          <div className="flex-1 flex items-center justify-center text-center text-[#4B5563] font-semibold">
-            <div>
-              <MessageCircle size={48} className="mx-auto mb-3 opacity-50"/>
-              쪽지를 선택하거나 새 대화를 시작하세요
-            </div>
+          <div className="py-20 text-center text-xs fp-mono uppercase tracking-[0.3em] text-[var(--text-mute)]">
+            Select a thread
           </div>
         ) : (
-          <>
-            <div className="flex items-center gap-3 pb-3 border-b-2 border-[#1A1A1A] mb-3">
-              <button onClick={() => navigate("/messages")} className="md:hidden" data-testid="back-to-list"><ArrowLeft size={20}/></button>
-              <div>
-                <div className="font-display font-black text-lg">@{thread.other_user.nickname}</div>
+          <div className="flex flex-col" style={{ minHeight: 480 }}>
+            <div className="flex items-center gap-3 pb-4 border-b border-[var(--line)] mb-4">
+              <button onClick={() => navigate("/messages")} className="md:hidden text-xs fp-mono uppercase tracking-[0.3em] text-[var(--text-mute)]" data-testid="back-list">←</button>
+              <div className={`text-base font-bold ${thread.is_admin_line ? "text-[var(--red)]" : ""}`} data-testid="thread-label">
+                {thread.other_label}
               </div>
+              {thread.is_admin_line && (
+                <span className="ml-auto text-[10px] fp-mono uppercase tracking-[0.3em] text-[var(--red)]">
+                  Auto-purge 24h
+                </span>
+              )}
             </div>
 
-            <div className="flex-1 overflow-y-auto space-y-2 py-2" style={{ maxHeight: 420 }} data-testid="message-list">
+            <div className="flex-1 space-y-4 overflow-y-auto pr-2" style={{ maxHeight: 460 }} data-testid="msg-list">
               {thread.messages.length === 0 ? (
-                <div className="text-center text-sm text-[#4B5563] font-semibold py-10">
-                  첫 쪽지를 보내보세요
+                <div className="py-10 text-center text-xs fp-mono uppercase tracking-[0.3em] text-[var(--text-mute)]">
+                  Say something.
                 </div>
               ) : thread.messages.map((m) => (
-                <div key={m.id} className={`flex ${m.from_me ? "justify-end" : "justify-start"}`}>
-                  <div className={`max-w-[75%] px-4 py-2 border-2 border-[#1A1A1A] rounded-2xl ${m.from_me ? "bg-[#FF5E5B] text-white rounded-br-md" : "bg-white rounded-bl-md"}`} data-testid={`msg-${m.id}`}>
-                    <p className="text-sm font-medium whitespace-pre-wrap break-words">{m.content}</p>
-                    <div className={`text-[10px] font-semibold mt-1 ${m.from_me ? "text-white/80" : "text-[#4B5563]"}`}>
-                      {timeAgo(m.created_at)}
-                    </div>
+                <div key={m.id} className={`flex ${m.from_me ? "justify-end" : "justify-start"}`} data-testid={`msg-${m.id}`}>
+                  <div className={`max-w-[75%] px-4 py-2 border ${m.from_me ? "border-[var(--red)] text-[var(--text)]" : "border-[var(--line-strong)] text-[var(--text-dim)]"}`}>
+                    <p className="text-sm leading-relaxed whitespace-pre-wrap break-words">{m.content}</p>
+                    <div className="text-[10px] fp-mono text-[var(--text-mute)] mt-1">{relTime(m.created_at)}</div>
                   </div>
                 </div>
               ))}
-              <div ref={bottomRef} />
+              <div ref={bottomRef}/>
             </div>
 
-            <form onSubmit={send} className="flex gap-2 pt-3 border-t-2 border-dashed border-[#D1D5DB]">
+            <form onSubmit={send} className="pt-4 border-t border-[var(--line)] flex gap-2">
               <input
-                className="nb-input flex-1"
-                placeholder="메시지를 입력하세요"
+                className="fp-input flex-1"
+                placeholder="Type. Anonymous."
                 value={text}
                 onChange={(e) => setText(e.target.value)}
                 maxLength={2000}
-                data-testid="message-input"
+                data-testid="msg-input"
               />
-              <button type="submit" disabled={!text.trim()} className="nb-btn nb-btn-primary" data-testid="send-message-btn">
-                <Send size={16}/>
-              </button>
+              <button type="submit" disabled={!text.trim()} className="fp-btn" data-testid="send-btn">Send</button>
             </form>
-          </>
+          </div>
         )}
-      </div>
+      </section>
     </div>
   );
 }
