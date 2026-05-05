@@ -46,7 +46,7 @@ export default function AppShell() {
       <div className="max-w-5xl mx-auto px-6 py-8 grid grid-cols-1 md:grid-cols-12 gap-10">
         <aside className="md:col-span-3 space-y-1">
           {link("/feed", "Feed", "nav-feed")}
-          {link("/champions", "★ Champions", "nav-champions")}
+          {link("/pillars", "★ The Pillars", "nav-pillars")}
           {link("/post/new", "Compose", "nav-new")}
           {link("/messages", "Messages", "nav-messages")}
           {link("/profile", "Profile", "nav-profile")}

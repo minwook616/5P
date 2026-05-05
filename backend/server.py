@@ -23,6 +23,14 @@ from pydantic import BaseModel, Field, EmailStr
 
 from email_service import send_otp, send_password_reset, send_admin_decision, send_key_granted
 
+from slowapi import Limiter
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
+from slowapi.middleware import SlowAPIMiddleware
+from fastapi.responses import JSONResponse
+
+limiter = Limiter(key_func=get_remote_address)
+
 # ---------------- Config ----------------
 JWT_ALGORITHM = "HS256"
 ACCESS_TOKEN_MINUTES = 60 * 24
@@ -36,13 +44,26 @@ ADMIN_DAILY_LIMIT = int(os.environ.get("ADMIN_DAILY_LIMIT", "5"))
 ADMIN_EMAIL = os.environ.get("ADMIN_EMAIL", "admin@iastate.edu").lower()
 OTP_TTL_MIN = int(os.environ.get("OTP_TTL_MIN", "10"))
 RESET_TTL_MIN = int(os.environ.get("RESET_TTL_MIN", "60"))
-CHAMPION_THRESHOLD = int(os.environ.get("CHAMPION_THRESHOLD", "15"))
+CHAMPION_THRESHOLD = int(os.environ.get("PILLAR_THRESHOLD", os.environ.get("CHAMPION_THRESHOLD", "15")))
+PILLAR_THRESHOLD = CHAMPION_THRESHOLD
+APP_ENV = os.environ.get("APP_ENV", "dev").lower()
+DEV_MODE = APP_ENV != "prod"
 
 mongo_url = os.environ["MONGO_URL"]
 client = AsyncIOMotorClient(mongo_url)
 db = client[os.environ["DB_NAME"]]
 
 app = FastAPI(title="5P (Five Posts) API")
+app.state.limiter = limiter
+
+
+async def rate_limit_handler(request: Request, exc: RateLimitExceeded):
+    return JSONResponse(
+        status_code=429,
+        content={"detail": "요청이 너무 많습니다. 잠시 후 다시 시도해주세요."},
+    )
+
+app.add_exception_handler(RateLimitExceeded, rate_limit_handler)
 api = APIRouter(prefix="/api")
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
@@ -245,7 +266,7 @@ async def consume_recommendation_code(code: str, used_by_id: str) -> dict:
     return key
 
 
-async def mint_key(owner_id: str, source: str = "champion") -> dict:
+async def mint_key(owner_id: str, source: str = "pillar") -> dict:
     code = gen_recommendation_code()
     doc = {
         "code": code,
@@ -272,7 +293,8 @@ async def _issue_otp(uid: str, email: str):
         "created_at": now_utc().isoformat(),
     })
     await send_otp(email, code)
-    logger.info(f"OTP for {email} (dev): {code}")
+    if DEV_MODE:
+        logger.info(f"OTP for {email} (dev): {code}")
 
 
 async def _log_invite(invited: dict, recommender: Optional[dict], gate: str):
@@ -290,7 +312,8 @@ async def _log_invite(invited: dict, recommender: Optional[dict], gate: str):
 
 
 @api.post("/auth/register/isu")
-async def register_isu(body: RegisterIsuIn, response: Response):
+@limiter.limit("5/minute")
+async def register_isu(request: Request, body: RegisterIsuIn, response: Response):
     """Gate A — ISU email only, OTP verification, auto-active after OTP."""
     email = body.email.lower().strip()
     if not email_allowed(email):
@@ -315,7 +338,8 @@ async def register_isu(body: RegisterIsuIn, response: Response):
 
 
 @api.post("/auth/register/invite")
-async def register_invite(body: RegisterInviteIn, response: Response):
+@limiter.limit("5/minute")
+async def register_invite(request: Request, body: RegisterInviteIn, response: Response):
     """Gate B — Any email + recommendation key required. Skips OTP, goes to admin review."""
     email = body.email.lower().strip()
     if await db.users.find_one({"email": email}):
@@ -389,7 +413,8 @@ async def resend_otp(user: dict = Depends(get_current_user)):
 
 
 @api.post("/auth/login")
-async def login(body: LoginIn, response: Response):
+@limiter.limit("10/minute")
+async def login(request: Request, body: LoginIn, response: Response):
     email = body.email.lower().strip()
     u = await db.users.find_one({"email": email}, {"_id": 0})
     if not u or not verify_password(body.password, u["password_hash"]):
@@ -411,7 +436,8 @@ async def me(user: dict = Depends(get_current_user)):
 
 
 @api.post("/auth/forgot-password")
-async def forgot_password(body: ForgotIn):
+@limiter.limit("3/minute")
+async def forgot_password(request: Request, body: ForgotIn):
     email = body.email.lower().strip()
     u = await db.users.find_one({"email": email}, {"_id": 0})
     # silently succeed regardless to avoid enumeration
@@ -446,20 +472,20 @@ async def get_or_create_daily_state(date_key: str) -> dict:
     state = await db.daily_state.find_one({"date_key": date_key}, {"_id": 0})
     if state:
         return state
-    champion_id = None
+    pillar_id = None
     yk = (datetime.strptime(date_key, "%Y-%m-%d") - timedelta(days=1)).strftime("%Y-%m-%d")
     yest_posts = await db.posts.find({"date_key": yk}, {"_id": 0}).to_list(50)
     if yest_posts:
         ranked = sorted(yest_posts, key=lambda p: total_likes_of(p), reverse=True)
         if ranked and total_likes_of(ranked[0]) > 0:
-            champion_id = ranked[0]["author_id"]
+            pillar_id = ranked[0]["author_id"]
     start = day_start_local(date_key)
     offset = random.randint(0, 3599)
     unlock_at = start + timedelta(seconds=offset)
     state = {
         "date_key": date_key,
         "unlock_at": unlock_at.astimezone(timezone.utc).isoformat(),
-        "champion_id": champion_id,
+        "pillar_id": pillar_id,
         "created_at": now_utc().isoformat(),
     }
     try:
@@ -488,7 +514,7 @@ async def compute_status(user: dict) -> dict:
     state = await get_or_create_daily_state(dk)
     server_count = await server_post_count_today(dk)
     is_admin = user.get("is_admin", False)
-    is_champion = state.get("champion_id") == user["id"]
+    is_pillar_today = state.get("pillar_id") == user["id"]
     user_done = await user_posted_today(user["id"], dk)
     n_utc = now_utc()
     unlock_at = datetime.fromisoformat(state["unlock_at"])
@@ -507,7 +533,7 @@ async def compute_status(user: dict) -> dict:
         block_reason = "SERVER_FULL"
     elif user_done:
         block_reason = "USER_DONE"
-    elif is_champion:
+    elif is_pillar_today:
         can_post_now = True
     elif not golden_hour_passed:
         block_reason = "GOLDEN_HOUR_LOCKED"
@@ -522,7 +548,8 @@ async def compute_status(user: dict) -> dict:
         "available_slots": max(0, SERVER_DAILY_LIMIT - server_count),
         "user_posted_today": user_done,
         "is_admin": is_admin,
-        "is_champion": is_champion,
+        "is_pillar": is_pillar_today,
+        "is_champion": is_pillar_today,
         "spectator_mode": spectator,
         "can_post_now": can_post_now,
         "block_reason": block_reason,
@@ -540,7 +567,7 @@ def serialize_post(p: dict, viewer: dict) -> dict:
     is_blinded = len(p.get("reports", [])) >= 3
     is_admin = viewer.get("is_admin", False)
     show_real = is_admin
-    is_champ_post = p.get("is_champion", False) or total_likes_of(p) >= CHAMPION_THRESHOLD
+    is_pillar_post = p.get("is_pillar", p.get("is_champion", False)) or total_likes_of(p) >= PILLAR_THRESHOLD
     return {
         "id": p["id"],
         "title": p["title"] if not is_blinded or is_admin else "블라인드 처리된 글",
@@ -558,24 +585,25 @@ def serialize_post(p: dict, viewer: dict) -> dict:
         "liked_by_me": viewer["id"] in p.get("likes", []),
         "comment_count": p.get("comment_count", 0),
         "report_count": len(p.get("reports", [])) if is_admin else None,
-        "is_champion": is_champ_post,
+        "is_pillar": is_pillar_post,
+        "is_champion": is_pillar_post,
         "created_at": p["created_at"],
     }
 
 
-async def maybe_promote_to_champion(post_id: str):
+async def maybe_promote_to_pillar(post_id: str):
     p = await db.posts.find_one({"id": post_id}, {"_id": 0})
     if not p:
         return
-    if not p.get("is_champion") and total_likes_of(p) >= CHAMPION_THRESHOLD:
-        await db.posts.update_one({"id": post_id}, {"$set": {"is_champion": True, "champion_at": now_utc().isoformat()}})
-        # Issue lifetime key to author if not yet granted (only for non-admin authors)
+    already = p.get("is_pillar") or p.get("is_champion")
+    if not already and total_likes_of(p) >= PILLAR_THRESHOLD:
+        await db.posts.update_one({"id": post_id}, {"$set": {"is_pillar": True, "pillar_at": now_utc().isoformat()}})
         author = await db.users.find_one({"id": p["author_id"]}, {"_id": 0})
         if author and not author.get("key_granted") and not author.get("is_admin"):
-            key = await mint_key(author["id"], source="champion")
+            key = await mint_key(author["id"], source="pillar")
             await db.users.update_one({"id": author["id"]}, {"$set": {"key_granted": True}})
             await send_key_granted(author["email"], key["code"])
-            logger.info(f"Champion key granted to {author['email']}: {key['code']}")
+            logger.info(f"Pillar key granted to {author['email']}: {key['code']}")
 
 
 @api.post("/posts")
@@ -613,7 +641,7 @@ async def create_post(body: PostIn, user: dict = Depends(require_active)):
 
 @api.get("/posts")
 async def list_posts(date_key: Optional[str] = None, user: dict = Depends(require_active)):
-    q = {"is_champion": {"$ne": True}}
+    q = {"is_pillar": {"$ne": True}, "is_champion": {"$ne": True}}
     if date_key:
         q["date_key"] = date_key
     cursor = db.posts.find(q, {"_id": 0}).sort("created_at", -1).limit(200)
@@ -621,14 +649,20 @@ async def list_posts(date_key: Optional[str] = None, user: dict = Depends(requir
     return [serialize_post(p, user) for p in items]
 
 
-@api.get("/champions")
-async def list_champions(user: dict = Depends(require_active)):
+@api.get("/pillars")
+async def list_pillars(user: dict = Depends(require_active)):
     cursor = db.posts.find(
-        {"$or": [{"is_champion": True}, {"boost_likes": {"$gt": 0}}]}, {"_id": 0}
-    ).sort([("champion_at", -1), ("created_at", -1)]).limit(500)
+        {"$or": [{"is_pillar": True}, {"is_champion": True}, {"boost_likes": {"$gt": 0}}]}, {"_id": 0}
+    ).sort([("pillar_at", -1), ("created_at", -1)]).limit(500)
     items = await cursor.to_list(500)
-    items = [p for p in items if total_likes_of(p) >= CHAMPION_THRESHOLD or p.get("is_champion")]
+    items = [p for p in items if total_likes_of(p) >= PILLAR_THRESHOLD or p.get("is_pillar") or p.get("is_champion")]
     return [serialize_post(p, user) for p in items]
+
+
+# Backwards-compat alias
+@api.get("/champions")
+async def list_champions_compat(user: dict = Depends(require_active)):
+    return await list_pillars(user)
 
 
 @api.get("/posts/{pid}")
@@ -650,7 +684,7 @@ async def like(pid: str, user: dict = Depends(require_active)):
     else:
         await db.posts.update_one({"id": pid}, {"$addToSet": {"likes": user["id"]}})
         liked = True
-    await maybe_promote_to_champion(pid)
+    await maybe_promote_to_pillar(pid)
     fresh = await db.posts.find_one({"id": pid}, {"_id": 0})
     return {"liked": liked, "like_count": total_likes_of(fresh)}
 
@@ -794,7 +828,7 @@ async def list_conversations(user: dict = Depends(require_active)):
             "unread": unread,
         }
     s = await compute_status(user)
-    if s["is_champion"]:
+    if s.get("is_pillar") or s.get("is_champion"):
         admin = await get_admin_user()
         if admin and admin["id"] != user["id"]:
             cid = conv_id_for(user["id"], admin["id"]) + "::admin_line"
@@ -804,7 +838,7 @@ async def list_conversations(user: dict = Depends(require_active)):
                     "other_user_id": admin["id"],
                     "label": "운영자 비밀 통로",
                     "is_admin_line": True,
-                    "last_message": "챔피언 전용 1:1 비밀 채널 (24시간 후 자동 파기)",
+                    "last_message": "Pillar 전용 1:1 비밀 채널 (24시간 후 자동 파기)",
                     "last_at": now_utc().isoformat(),
                     "unread": 0,
                 }
@@ -821,7 +855,7 @@ async def get_thread(conv_id: str, user: dict = Depends(require_active)):
     other_id = parts[0] if parts[1] == user["id"] else parts[1]
     if is_admin_line:
         s = await compute_status(user)
-        if not (s["is_champion"] or user.get("is_admin")):
+        if not (s.get("is_pillar") or s.get("is_champion") or user.get("is_admin")):
             raise HTTPException(403, "운영자 비밀 통로 사용 권한이 없습니다.")
         cutoff = (now_utc() - timedelta(hours=24)).isoformat()
         await db.messages.delete_many({"conv_id": conv_id, "created_at": {"$lt": cutoff}})
@@ -853,7 +887,7 @@ async def send_message(body: MessageIn, user: dict = Depends(require_active)):
     if other.get("is_admin", False) or user.get("is_admin", False):
         s_user = await compute_status(user)
         s_other = await compute_status(other)
-        if s_user["is_champion"] or s_other["is_champion"]:
+        if s_user.get("is_pillar") or s_other.get("is_pillar") or s_user.get("is_champion") or s_other.get("is_champion"):
             admin_line = True
             cid = cid + "::admin_line"
     doc = {
@@ -910,14 +944,87 @@ async def admin_pending_v2(_: dict = Depends(require_admin)):
     for u in items:
         rid = u.get("recommended_by")
         if rid:
-            r = await db.users.find_one({"id": rid}, {"_id": 0, "email": 1, "nickname": 1})
+            r = await db.users.find_one({"id": rid}, {"_id": 0, "email": 1, "nickname": 1, "created_at": 1, "is_admin": 1})
             u["recommended_by_email"] = r["email"] if r else None
             u["recommended_by_nickname"] = (r.get("nickname") if r else None) or (r["email"].split("@")[0] if r else None)
-            # recommender quick stats
             posts_n = await db.posts.count_documents({"author_id": rid})
             invites_n = await db.invite_logs.count_documents({"recommender_id": rid})
-            u["recommender_stats"] = {"posts": posts_n, "invites": invites_n}
+            rejected_n = await db.users.count_documents({"recommended_by": rid, "status": "rejected"})
+            approved_n = await db.users.count_documents({"recommended_by": rid, "status": "active"})
+            total_decided = rejected_n + approved_n
+            reject_rate = (rejected_n / total_decided) if total_decided > 0 else 0.0
+            # Suspicion heuristics
+            flags = []
+            if r and not r.get("is_admin"):
+                age_days = (now_utc() - datetime.fromisoformat(r["created_at"])).total_seconds() / 86400
+                if invites_n > 10:
+                    flags.append("HIGH_VOLUME")
+                if age_days < 7 and invites_n > 3:
+                    flags.append("FRESH_SPAMMER")
+                if reject_rate >= 0.3 and total_decided >= 3:
+                    flags.append("HIGH_REJECT_RATE")
+            u["recommender_stats"] = {
+                "posts": posts_n, "invites": invites_n,
+                "approved": approved_n, "rejected": rejected_n,
+                "reject_rate": round(reject_rate, 2),
+            }
+            u["recommender_flags"] = flags
     return items
+
+
+@api.post("/admin/users/batch-approve")
+async def admin_batch_approve(body: dict, _: dict = Depends(require_admin)):
+    """Approve multiple users at once. Body: {user_ids: [str, ...]}"""
+    ids = body.get("user_ids", []) if isinstance(body, dict) else []
+    if not isinstance(ids, list) or not ids:
+        raise HTTPException(400, "user_ids 배열이 필요합니다.")
+    approved = []
+    for uid in ids:
+        u = await db.users.find_one({"id": uid}, {"_id": 0})
+        if u and u.get("status") == "pending_review":
+            await db.users.update_one(
+                {"id": uid}, {"$set": {"status": "active", "reviewed_at": now_utc().isoformat()}}
+            )
+            await send_admin_decision(u["email"], approved=True)
+            approved.append(uid)
+    return {"approved": approved, "count": len(approved)}
+
+
+@api.post("/admin/users/batch-reject")
+async def admin_batch_reject(body: dict, _: dict = Depends(require_admin)):
+    """Reject multiple users at once. Body: {user_ids: [str, ...]}"""
+    ids = body.get("user_ids", []) if isinstance(body, dict) else []
+    if not isinstance(ids, list) or not ids:
+        raise HTTPException(400, "user_ids 배열이 필요합니다.")
+    rejected = []
+    for uid in ids:
+        u = await db.users.find_one({"id": uid}, {"_id": 0})
+        if u and u.get("status") in ("pending_review", "pending_email"):
+            await db.users.update_one(
+                {"id": uid}, {"$set": {"status": "rejected", "reviewed_at": now_utc().isoformat()}}
+            )
+            await send_admin_decision(u["email"], approved=False)
+            rejected.append(uid)
+    return {"rejected": rejected, "count": len(rejected)}
+
+
+@api.get("/admin/leaderboard")
+async def admin_invite_leaderboard(_: dict = Depends(require_admin)):
+    """Top recommenders by approved invites. Includes flags from heuristics."""
+    pipeline = [
+        {"$group": {
+            "_id": "$recommender_id",
+            "nickname": {"$first": "$recommender_nickname"},
+            "email": {"$first": "$recommender_email"},
+            "invites": {"$sum": 1},
+        }},
+        {"$match": {"_id": {"$ne": None}}},
+        {"$sort": {"invites": -1}},
+        {"$limit": 20},
+    ]
+    rows = await db.invite_logs.aggregate(pipeline).to_list(20)
+    return [{"recommender_id": r["_id"], "nickname": r.get("nickname"),
+             "email": r.get("email"), "invites": r["invites"]} for r in rows]
 
 
 @api.get("/admin/users/{uid}")
@@ -1007,18 +1114,31 @@ async def admin_list_keys(_: dict = Depends(require_admin)):
 
 @api.post("/admin/posts/{pid}/boost")
 async def admin_boost(pid: str, body: AdminBoostIn, _: dict = Depends(require_admin)):
-    """Set boost_likes value; recompute champion status."""
+    """Set boost_likes value; recompute pillar status."""
     p = await db.posts.find_one({"id": pid}, {"_id": 0})
     if not p:
         raise HTTPException(404, "게시글을 찾을 수 없습니다.")
     await db.posts.update_one({"id": pid}, {"$set": {"boost_likes": int(body.boost)}})
-    await maybe_promote_to_champion(pid)
+    await maybe_promote_to_pillar(pid)
     return {"ok": True, "boost": int(body.boost)}
 
 
 # ---------------- Startup ----------------
+async def _migrate_pillar_rename():
+    """Rename Champion → Pillar fields to keep backward compat."""
+    try:
+        await db.posts.update_many({"is_champion": {"$exists": True}, "is_pillar": {"$exists": False}}, {"$rename": {"is_champion": "is_pillar"}})
+        await db.posts.update_many({"champion_at": {"$exists": True}, "pillar_at": {"$exists": False}}, {"$rename": {"champion_at": "pillar_at"}})
+        await db.daily_state.update_many({"champion_id": {"$exists": True}, "pillar_id": {"$exists": False}}, {"$rename": {"champion_id": "pillar_id"}})
+        await db.recommendation_keys.update_many({"source": "champion"}, {"$set": {"source": "pillar"}})
+        logger.info("Pillar migration done")
+    except Exception as e:
+        logger.warning(f"Pillar migration: {e}")
+
+
 @app.on_event("startup")
 async def startup():
+    await _migrate_pillar_rename()
     await db.users.create_index("email", unique=True)
     await db.users.create_index("id", unique=True)
     await db.users.create_index("status")

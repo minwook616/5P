@@ -7,20 +7,25 @@ export default function Admin() {
   const [pending, setPending] = useState([]);
   const [keys, setKeys] = useState([]);
   const [logs, setLogs] = useState([]);
+  const [board, setBoard] = useState([]);
   const [detail, setDetail] = useState(null);
+  const [selected, setSelected] = useState(new Set());
   const [loading, setLoading] = useState(true);
 
   const load = async () => {
     setLoading(true);
     try {
-      const [p, k, l] = await Promise.all([
+      const [p, k, l, b] = await Promise.all([
         api.get("/admin/pending"),
         api.get("/admin/keys"),
         api.get("/admin/invite-log"),
+        api.get("/admin/leaderboard"),
       ]);
       setPending(p.data);
       setKeys(k.data);
       setLogs(l.data);
+      setBoard(b.data);
+      setSelected(new Set());
     } catch (err) {
       toast.error(formatApiError(err.response?.data?.detail));
     } finally {
@@ -35,6 +40,19 @@ export default function Admin() {
       await api.post(`/admin/users/${uid}/${action}`);
       toast.success(action === "approve" ? "Approved" : "Rejected");
       setDetail(null);
+      load();
+    } catch (err) {
+      toast.error(formatApiError(err.response?.data?.detail));
+    }
+  };
+
+  const batchDecide = async (action) => {
+    const ids = Array.from(selected);
+    if (ids.length === 0) return;
+    if (!window.confirm(`${ids.length}명 ${action === "batch-approve" ? "승인" : "거절"}할까요?`)) return;
+    try {
+      const { data } = await api.post(`/admin/users/${action}`, { user_ids: ids });
+      toast.success(`${data.count}명 처리됨`);
       load();
     } catch (err) {
       toast.error(formatApiError(err.response?.data?.detail));
@@ -65,6 +83,22 @@ export default function Admin() {
     toast.success("Copied");
   };
 
+  const toggleSel = (uid) => {
+    setSelected((s) => {
+      const n = new Set(s);
+      if (n.has(uid)) n.delete(uid); else n.add(uid);
+      return n;
+    });
+  };
+  const toggleAll = () => {
+    if (selected.size === pending.length) setSelected(new Set());
+    else setSelected(new Set(pending.map((u) => u.id)));
+  };
+
+  const flagLabel = (f) => ({
+    HIGH_VOLUME: "다량 초대", FRESH_SPAMMER: "신규 폭주", HIGH_REJECT_RATE: "거절률 높음",
+  }[f] || f);
+
   return (
     <div className="space-y-8">
       <div className="flex items-center justify-between flex-wrap gap-3">
@@ -82,6 +116,7 @@ export default function Admin() {
           ["pending", `Initiation (${pending.length})`],
           ["keys", `Keys (${keys.length})`],
           ["logs", `Invite Log (${logs.length})`],
+          ["board", `Leaderboard (${board.length})`],
         ].map(([k, label]) => (
           <button
             key={k}
@@ -104,32 +139,74 @@ export default function Admin() {
             No applications.
           </div>
         ) : (
-          <div className="divide-y divide-[var(--line)] border-y border-[var(--line)]" data-testid="pending-list">
-            {pending.map((u) => (
-              <div key={u.id} className="py-5 flex items-start justify-between gap-4 flex-wrap" data-testid={`pending-${u.id}`}>
-                <button onClick={() => openDetail(u.id)} className="flex-1 text-left hover:opacity-80" data-testid={`detail-${u.id}`}>
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="font-bold text-base">{u.email}</span>
-                    <span className={`text-[9px] fp-mono uppercase tracking-[0.3em] px-1.5 py-0.5 border ${u.gate === "isu" ? "border-[var(--text-mute)] text-[var(--text-mute)]" : "border-[var(--red)] text-[var(--red)]"}`}>
-                      {u.gate === "isu" ? "ISU" : "Invite"}
-                    </span>
-                  </div>
-                  <div className="text-[10px] fp-mono uppercase tracking-[0.25em] text-[var(--text-mute)] mt-1">
-                    추천인: <span className="text-[var(--text-dim)]">{u.recommended_by_nickname || "—"}</span>
-                    {u.recommender_stats && <span className="ml-3">posts {u.recommender_stats.posts} · invites {u.recommender_stats.invites}</span>}
-                  </div>
-                  {u.email_verified_at && (
-                    <div className="text-[10px] fp-mono uppercase tracking-[0.25em] text-[var(--text-mute)] mt-1">
-                      Verified · {new Date(u.email_verified_at).toLocaleString()}
+          <div>
+            {/* Batch toolbar */}
+            <div className="flex items-center gap-3 pb-3 mb-3 border-b border-[var(--line)] text-xs fp-mono uppercase tracking-[0.25em]" data-testid="batch-toolbar">
+              <button onClick={toggleAll} className="text-[var(--text-mute)] hover:text-[var(--text)]" data-testid="select-all">
+                {selected.size === pending.length ? "Deselect all" : "Select all"}
+              </button>
+              <span className="text-[var(--text-mute)]">·</span>
+              <span className="text-[var(--text-dim)]">{selected.size} selected</span>
+              <span className="ml-auto flex gap-2">
+                <button
+                  onClick={() => batchDecide("batch-approve")}
+                  disabled={selected.size === 0}
+                  className="fp-btn text-xs"
+                  data-testid="batch-approve-btn"
+                >Approve {selected.size > 0 ? selected.size : ""}</button>
+                <button
+                  onClick={() => batchDecide("batch-reject")}
+                  disabled={selected.size === 0}
+                  className="fp-btn fp-btn-red text-xs"
+                  data-testid="batch-reject-btn"
+                >Reject {selected.size > 0 ? selected.size : ""}</button>
+              </span>
+            </div>
+
+            <div className="divide-y divide-[var(--line)] border-y border-[var(--line)]" data-testid="pending-list">
+              {pending.map((u) => (
+                <div key={u.id} className="py-5 flex items-start gap-4 flex-wrap" data-testid={`pending-${u.id}`}>
+                  <input
+                    type="checkbox"
+                    checked={selected.has(u.id)}
+                    onChange={() => toggleSel(u.id)}
+                    className="mt-1.5 accent-[var(--red)]"
+                    data-testid={`select-${u.id}`}
+                  />
+                  <button onClick={() => openDetail(u.id)} className="flex-1 text-left hover:opacity-80" data-testid={`detail-${u.id}`}>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-bold text-base">{u.email}</span>
+                      <span className={`text-[9px] fp-mono uppercase tracking-[0.3em] px-1.5 py-0.5 border ${u.gate === "isu" ? "border-[var(--text-mute)] text-[var(--text-mute)]" : "border-[var(--red)] text-[var(--red)]"}`}>
+                        {u.gate === "isu" ? "ISU" : "Invite"}
+                      </span>
+                      {(u.recommender_flags || []).map((f) => (
+                        <span key={f} className="text-[9px] fp-mono uppercase tracking-[0.3em] px-1.5 py-0.5 border border-[var(--red)] bg-[var(--red)]/10 text-[var(--red)]" data-testid={`flag-${f}`}>
+                          ⚠ {flagLabel(f)}
+                        </span>
+                      ))}
                     </div>
-                  )}
-                </button>
-                <div className="flex gap-2">
-                  <button onClick={() => decide(u.id, "approve")} className="fp-btn" data-testid={`approve-${u.id}`}>Approve</button>
-                  <button onClick={() => decide(u.id, "reject")} className="fp-btn fp-btn-red" data-testid={`reject-${u.id}`}>Reject</button>
+                    <div className="text-[10px] fp-mono uppercase tracking-[0.25em] text-[var(--text-mute)] mt-1">
+                      추천인: <span className="text-[var(--text-dim)]">{u.recommended_by_nickname || "—"}</span>
+                      {u.recommender_stats && (
+                        <span className="ml-3">
+                          posts {u.recommender_stats.posts} · invites {u.recommender_stats.invites}
+                          {" · "}reject {Math.round((u.recommender_stats.reject_rate || 0) * 100)}%
+                        </span>
+                      )}
+                    </div>
+                    {u.email_verified_at && (
+                      <div className="text-[10px] fp-mono uppercase tracking-[0.25em] text-[var(--text-mute)] mt-1">
+                        Verified · {new Date(u.email_verified_at).toLocaleString()}
+                      </div>
+                    )}
+                  </button>
+                  <div className="flex gap-2">
+                    <button onClick={() => decide(u.id, "approve")} className="fp-btn" data-testid={`approve-${u.id}`}>Approve</button>
+                    <button onClick={() => decide(u.id, "reject")} className="fp-btn fp-btn-red" data-testid={`reject-${u.id}`}>Reject</button>
+                  </div>
                 </div>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
         )
       ) : tab === "keys" ? (
@@ -153,7 +230,7 @@ export default function Admin() {
             </div>
           ))}
         </div>
-      ) : (
+      ) : tab === "logs" ? (
         <div className="divide-y divide-[var(--line)] border-y border-[var(--line)]" data-testid="invite-logs-list">
           {logs.length === 0 ? (
             <div className="py-12 text-center text-xs fp-mono uppercase tracking-[0.3em] text-[var(--text-mute)]">
@@ -172,6 +249,32 @@ export default function Admin() {
               </span>
             </div>
           ))}
+        </div>
+      ) : (
+        <div data-testid="leaderboard-list">
+          <div className="text-[10px] fp-mono uppercase tracking-[0.3em] text-[var(--text-mute)] mb-3">
+            Top recommenders by approved invites
+          </div>
+          {board.length === 0 ? (
+            <div className="py-12 text-center text-xs fp-mono uppercase tracking-[0.3em] text-[var(--text-mute)]">
+              Empty.
+            </div>
+          ) : (
+            <div className="divide-y divide-[var(--line)] border-y border-[var(--line)]">
+              {board.map((row, i) => (
+                <div key={row.recommender_id} className="py-4 flex items-center gap-4" data-testid={`board-row-${row.recommender_id}`}>
+                  <span className="fp-mono text-2xl tracking-tighter w-10" style={{color: i < 3 ? "#D4AF37" : "var(--text-mute)"}}>
+                    {String(i + 1).padStart(2, "0")}
+                  </span>
+                  <div className="flex-1">
+                    <div className="font-bold">{row.nickname || row.email}</div>
+                    <div className="text-[10px] fp-mono uppercase tracking-[0.25em] text-[var(--text-mute)] mt-1">{row.email}</div>
+                  </div>
+                  <span className="fp-mono text-base text-[var(--red)]">{row.invites}</span>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
 
@@ -206,7 +309,6 @@ export default function Admin() {
               <Stat label="Invites" value={detail.stats.invites_count} />
             </div>
 
-            {/* Recommender */}
             <div className="border-t border-[var(--line)] pt-4">
               <div className="text-[10px] fp-mono uppercase tracking-[0.3em] text-[var(--text-mute)] mb-2">Recommended By</div>
               {detail.recommender ? (
@@ -219,7 +321,6 @@ export default function Admin() {
               )}
             </div>
 
-            {/* Invitees genealogy */}
             <div className="border-t border-[var(--line)] pt-4">
               <div className="text-[10px] fp-mono uppercase tracking-[0.3em] text-[var(--text-mute)] mb-3">
                 Invited ({detail.invitees.length})

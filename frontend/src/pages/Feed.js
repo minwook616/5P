@@ -133,9 +133,9 @@ function SlotHeader({ status, now, onCompose }) {
         <h1 className="font-bold text-5xl sm:text-6xl tracking-tighter" data-testid="available-headline">
           AVAILABLE<span className="text-[var(--red)]">:</span> {available}/{slots}
         </h1>
-        {status.is_champion && (
-          <span className="text-[10px] uppercase tracking-[0.4em] fp-mono text-[var(--red)] border border-[var(--red)] px-2 py-1" data-testid="champion-badge">
-            Champion · Priority Access
+        {(status.is_pillar || status.is_champion) && (
+          <span className="text-[10px] uppercase tracking-[0.4em] fp-mono text-[var(--red)] border border-[var(--red)] px-2 py-1" data-testid="pillar-badge">
+            Pillar · Priority Access
           </span>
         )}
         {status.is_admin && (

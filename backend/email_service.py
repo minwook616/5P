@@ -91,10 +91,10 @@ async def send_admin_decision(to: str, approved: bool):
 async def send_key_granted(to: str, code: str):
     body = f"""
       <p style="margin:0 0 8px 0;font-size:18px;color:#F5F5F5;font-weight:700;">A post you wrote crossed 15 likes.</p>
-      <p style="margin:8px 0 16px 0;font-size:13px;color:#8C8C8C;">As tradition, you receive one Recommendation Key — for the rest of your life. Use it wisely.</p>
+      <p style="margin:8px 0 16px 0;font-size:13px;color:#8C8C8C;">As tradition, you receive one Pillar Key — for the rest of your life. Use it wisely.</p>
       <div style="margin:16px 0;padding:18px;background:#0A0A0A;border:1px solid #C8102E;text-align:center;">
         <span style="font-family:'Courier New',monospace;font-size:22px;letter-spacing:6px;color:#F5F5F5;font-weight:700;">{code}</span>
       </div>
       <p style="margin:8px 0 0 0;font-size:11px;color:#545454;">One key per lifetime. Non-renewable.</p>
     """
-    return await _send(to, f"{APP_NAME} · Recommendation Key Granted", _wrap("Champion's Key", body))
+    return await _send(to, f"{APP_NAME} · Pillar Key Granted", _wrap("Pillar's Key", body))

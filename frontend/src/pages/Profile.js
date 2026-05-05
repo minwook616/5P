@@ -42,7 +42,7 @@ export default function Profile() {
           <Row label="Today" value={status.today_key} />
           <Row label="Slots" value={`${status.server_used}/${status.server_limit}`} />
           <Row label="Posted today" value={status.user_posted_today ? "Yes" : "No"} />
-          {status.is_champion && <Row label="Status" value="Champion · Priority" red />}
+          {(status.is_pillar || status.is_champion) && <Row label="Status" value="Pillar · Priority" red />}
         </>}
       </div>
 
@@ -53,7 +53,7 @@ export default function Profile() {
         </div>
         {keys.length === 0 ? (
           <div className="text-xs text-[var(--text-mute)] fp-mono uppercase tracking-[0.25em]">
-            None yet. Champions receive one — for life.
+            None yet. Pillars receive one — for life.
           </div>
         ) : (
           <div className="space-y-2" data-testid="my-keys">
@@ -79,7 +79,7 @@ export default function Profile() {
 
       <div className="text-[11px] text-[var(--text-mute)] leading-relaxed border-t border-[var(--line)] pt-6">
         Your identity is hidden in posts, comments, and DMs.
-        Champions receive one Recommendation Key for life — share it carefully.
+        Pillars receive one Pillar Key for life — share it carefully.
       </div>
     </div>
   );

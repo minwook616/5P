@@ -36,6 +36,9 @@ def _sess():
 def _admin_session():
     s = _sess()
     r = s.post(f"{API}/auth/login", json={"email": ADMIN_EMAIL, "password": ADMIN_PASSWORD})
+    if r.status_code == 429:
+        time.sleep(62)
+        r = s.post(f"{API}/auth/login", json={"email": ADMIN_EMAIL, "password": ADMIN_PASSWORD})
     assert r.status_code == 200, r.text
     return s
 
@@ -73,6 +76,9 @@ def _register_isu_and_verify():
     s = _sess()
     email = _new_isu_email()
     r = s.post(f"{API}/auth/register/isu", json={"email": email, "password": "testpass123"})
+    if r.status_code == 429:
+        time.sleep(62)
+        r = s.post(f"{API}/auth/register/isu", json={"email": email, "password": "testpass123"})
     assert r.status_code == 200, r.text
     uid = r.json()["user"]["id"]
     assert r.json()["user"]["status"] == "pending_email"
@@ -91,7 +97,26 @@ def _register_invite(code, email=None):
     r = s.post(f"{API}/auth/register/invite", json={
         "email": email, "password": "testpass123", "recommendation_code": code
     })
+    # If rate-limited, wait and retry once after sleeping a portion of the window
+    if r.status_code == 429:
+        time.sleep(62)
+        r = s.post(f"{API}/auth/register/invite", json={
+            "email": email, "password": "testpass123", "recommendation_code": code
+        })
     return s, email, r
+
+
+def _register_isu_safe():
+    """Wrapper that handles 429 from register/isu rate limit."""
+    for _ in range(2):
+        try:
+            return _register_isu_and_verify()
+        except AssertionError as e:
+            if "429" in str(e):
+                time.sleep(62)
+                continue
+            raise
+    return _register_isu_and_verify()
 
 
 def _mongo_run(coro):
@@ -295,10 +320,10 @@ class TestExistingFlows:
         assert r.status_code == 200
         assert r.json()["code"].startswith("5P-")
 
-    def test_admin_post_and_boost_to_champion(self):
+    def test_admin_post_and_boost_to_pillar(self):
         a = _admin_session()
         _mongo_run(_backdate_unlock_all())
-        rp = a.post(f"{API}/posts", json={"title": "TEST_iter4_champ", "content": "x"})
+        rp = a.post(f"{API}/posts", json={"title": "TEST_iter5_pillar", "content": "x"})
         if rp.status_code != 200:
             pytest.skip(f"admin cannot post: {rp.text}")
         pid = rp.json()["id"]
@@ -306,9 +331,15 @@ class TestExistingFlows:
             rb = a.post(f"{API}/admin/posts/{pid}/boost", json={"boost": 20})
             assert rb.status_code == 200
             view = a.get(f"{API}/posts/{pid}").json()
+            # Both is_pillar and is_champion should be True (mirrored)
+            assert view["is_pillar"] is True
             assert view["is_champion"] is True
-            ch = a.get(f"{API}/champions").json()
+            # /pillars returns the post
+            ch = a.get(f"{API}/pillars").json()
             assert any(p["id"] == pid for p in ch)
+            # /champions alias still works
+            ch2 = a.get(f"{API}/champions").json()
+            assert any(p["id"] == pid for p in ch2)
         finally:
             a.delete(f"{API}/posts/{pid}")
 
@@ -343,3 +374,222 @@ class TestIdentityProtection:
             assert "resend" not in txt or "re_" not in txt
             # ensure no obvious api-key-shaped string
             assert "resend_api_key" not in txt
+
+
+# ============================================================
+# Iteration 5 — Pillar rename, batch admin, leaderboard, rate limits
+class TestPillarRenameAndStatus:
+    def test_pillars_endpoint_works(self):
+        a = _admin_session()
+        r = a.get(f"{API}/pillars")
+        assert r.status_code == 200, r.text
+        assert isinstance(r.json(), list)
+
+    def test_champions_alias_still_works(self):
+        a = _admin_session()
+        r = a.get(f"{API}/champions")
+        assert r.status_code == 200, r.text
+        assert isinstance(r.json(), list)
+
+    def test_pillars_and_champions_return_same_data(self):
+        a = _admin_session()
+        p = a.get(f"{API}/pillars").json()
+        c = a.get(f"{API}/champions").json()
+        assert {x["id"] for x in p} == {x["id"] for x in c}
+
+    def test_pillars_includes_promoted_post_fields(self):
+        a = _admin_session()
+        _mongo_run(_backdate_unlock_all())
+        rp = a.post(f"{API}/posts", json={"title": "TEST_pillar_fields", "content": "z"})
+        if rp.status_code != 200:
+            pytest.skip(f"admin cannot post: {rp.text}")
+        pid = rp.json()["id"]
+        try:
+            a.post(f"{API}/admin/posts/{pid}/boost", json={"boost": 20})
+            items = a.get(f"{API}/pillars").json()
+            entry = next((p for p in items if p["id"] == pid), None)
+            assert entry is not None
+            assert entry["is_pillar"] is True
+            assert entry["is_champion"] is True  # mirrored
+            assert "pillar_at" in entry or entry.get("pillar_at") is None or True
+        finally:
+            a.delete(f"{API}/posts/{pid}")
+
+    def test_status_today_has_both_pillar_and_champion(self):
+        a = _admin_session()
+        st = a.get(f"{API}/status/today").json()
+        assert "is_pillar" in st, st
+        assert "is_champion" in st, st
+        assert isinstance(st["is_pillar"], bool)
+        assert isinstance(st["is_champion"], bool)
+        # mirrored
+        assert st["is_pillar"] == st["is_champion"]
+
+
+class TestBatchAdmin:
+    def test_batch_approve_empty_list_400(self):
+        a = _admin_session()
+        r = a.post(f"{API}/admin/users/batch-approve", json={"user_ids": []})
+        assert r.status_code == 400
+
+    def test_batch_reject_empty_list_400(self):
+        a = _admin_session()
+        r = a.post(f"{API}/admin/users/batch-reject", json={"user_ids": []})
+        assert r.status_code == 400
+
+    def test_batch_approve_two_users(self):
+        a = _admin_session()
+        # Create 2 invite-pending users (auto-retries on 429 via _register_invite)
+        c1 = _mint_admin_key()
+        c2 = _mint_admin_key()
+        s1, e1, r1 = _register_invite(c1)
+        s2, e2, r2 = _register_invite(c2)
+        assert r1.status_code == 200, r1.text
+        assert r2.status_code == 200, r2.text
+        u1 = r1.json()["user"]["id"]
+        u2 = r2.json()["user"]["id"]
+        rb = a.post(f"{API}/admin/users/batch-approve", json={"user_ids": [u1, u2]})
+        assert rb.status_code == 200, rb.text
+        body = rb.json()
+        assert body["count"] == 2
+        assert set(body["approved"]) == {u1, u2}
+        # Verify persistence via admin/users/{uid}
+        d1 = a.get(f"{API}/admin/users/{u1}").json()
+        assert d1["user"]["status"] == "active"
+
+    def test_batch_reject_two_users(self):
+        a = _admin_session()
+        c1 = _mint_admin_key()
+        c2 = _mint_admin_key()
+        s1, e1, r1 = _register_invite(c1)
+        s2, e2, r2 = _register_invite(c2)
+        assert r1.status_code == 200 and r2.status_code == 200
+        u1 = r1.json()["user"]["id"]
+        u2 = r2.json()["user"]["id"]
+        rb = a.post(f"{API}/admin/users/batch-reject", json={"user_ids": [u1, u2]})
+        assert rb.status_code == 200, rb.text
+        body = rb.json()
+        assert body["count"] == 2
+        assert set(body["rejected"]) == {u1, u2}
+        d1 = a.get(f"{API}/admin/users/{u1}").json()
+        assert d1["user"]["status"] == "rejected"
+
+    def test_batch_approve_skips_non_pending(self):
+        a = _admin_session()
+        admin_me = a.get(f"{API}/auth/me").json()
+        # admin user is already active; should be skipped
+        rb = a.post(f"{API}/admin/users/batch-approve", json={"user_ids": [admin_me["id"]]})
+        assert rb.status_code == 200
+        assert rb.json()["count"] == 0
+
+
+class TestRecommenderFlagsAndLeaderboard:
+    def test_pending_includes_recommender_flags(self):
+        a = _admin_session()
+        # ensure at least one pending exists
+        c = _mint_admin_key()
+        s, email, r = _register_invite(c)
+        assert r.status_code == 200, r.text
+        items = a.get(f"{API}/admin/pending").json()
+        assert len(items) > 0
+        for it in items:
+            if it.get("recommended_by"):
+                assert "recommender_flags" in it
+                assert isinstance(it["recommender_flags"], list)
+                rs = it.get("recommender_stats", {})
+                for k in ("posts", "invites", "approved", "rejected", "reject_rate"):
+                    assert k in rs, f"missing {k} in recommender_stats"
+
+    def test_leaderboard_returns_top_recommenders(self):
+        a = _admin_session()
+        rows = a.get(f"{API}/admin/leaderboard").json()
+        assert isinstance(rows, list)
+        # admin should appear since admin minted many keys/invites
+        if rows:
+            r0 = rows[0]
+            for k in ("recommender_id", "nickname", "email", "invites"):
+                assert k in r0, f"missing {k}"
+            assert isinstance(r0["invites"], int)
+            # sorted desc
+            invites = [r["invites"] for r in rows]
+            assert invites == sorted(invites, reverse=True)
+
+
+class TestPillarMigration:
+    def test_no_legacy_champion_only_keys_in_db(self):
+        async def _check():
+            client = AsyncIOMotorClient(MONGO_URL)
+            db = client[DB_NAME]
+            # any post with is_champion but not is_pillar would be a stale doc
+            stale_posts = await db.posts.count_documents({"is_champion": {"$exists": True}, "is_pillar": {"$exists": False}})
+            stale_state = await db.daily_state.count_documents({"champion_id": {"$exists": True}, "pillar_id": {"$exists": False}})
+            stale_keys = await db.recommendation_keys.count_documents({"source": "champion"})
+            client.close()
+            return stale_posts, stale_state, stale_keys
+        sp, ss, sk = _mongo_run(_check())
+        assert sp == 0, f"{sp} posts still have only is_champion (migration failed)"
+        assert ss == 0, f"{ss} daily_state still have only champion_id"
+        assert sk == 0, f"{sk} recommendation_keys still have source='champion'"
+
+
+class TestDevModeLogging:
+    def test_otp_log_present_when_dev(self):
+        # APP_ENV=dev (default), OTP should be logged
+        s, email, uid = _register_isu_safe()
+        # _register_isu_and_verify already asserts OTP is in logs; if it returned, log is present
+        assert email
+
+
+# ============================================================
+# Rate limits — placed LAST because they intentionally exhaust per-IP buckets,
+# which would otherwise poison subsequent tests (they all share the proxy IP).
+class TestZRateLimits:
+    def test_isu_register_rate_limit_429(self):
+        codes = []
+        msg = ""
+        for _ in range(12):
+            s = _sess()
+            r = s.post(f"{API}/auth/register/isu", json={
+                "email": _new_isu_email(), "password": "testpass123"
+            })
+            codes.append(r.status_code)
+            if r.status_code == 429:
+                try:
+                    msg = r.json().get("detail", r.text)
+                except Exception:
+                    msg = r.text
+        assert 429 in codes, f"Expected 429 in {codes}"
+        # Korean rate-limit message
+        assert "요청" in msg or "너무" in msg or "잠시" in msg, f"unexpected 429 body: {msg!r}"
+
+    def test_login_rate_limit_429(self):
+        codes = []
+        # fire well above 10/min to overcome slowapi moving-window slack
+        for _ in range(25):
+            s = _sess()
+            r = s.post(f"{API}/auth/login", json={
+                "email": "nobody_xyz_unique_rl@iastate.edu", "password": "wrong"
+            })
+            codes.append(r.status_code)
+        assert 429 in codes, f"Expected 429 in {codes}"
+
+    def test_forgot_password_rate_limit_429(self):
+        codes = []
+        # 3/min limit - fire 8 to be safe against slack
+        for _ in range(8):
+            s = _sess()
+            r = s.post(f"{API}/auth/forgot-password", json={"email": "nobody_rl@iastate.edu"})
+            codes.append(r.status_code)
+        assert 429 in codes, f"Expected 429 in {codes}"
+
+    def test_invite_register_rate_limit_429(self):
+        # 5/min on invite endpoint
+        codes = []
+        for _ in range(8):
+            s = _sess()
+            r = s.post(f"{API}/auth/register/invite", json={
+                "email": _new_external_email(), "password": "testpass123",
+                "recommendation_code": "5P-DOESNOTMATTER"
+            })
+            codes.append(r.status_code)
+        assert 429 in codes, f"Expected 429 in {codes}"

@@ -71,7 +71,7 @@ export default function Register() {
           >
             <div className="text-[10px] fp-mono uppercase tracking-[0.3em] mb-1">Gate B</div>
             <div className="font-bold text-base">Invitation</div>
-            <div className={`text-[10px] mt-1 ${!isIsu ? "text-white/80" : "text-[var(--text-mute)]"}`}>Any email · Champion key + admin review</div>
+            <div className={`text-[10px] mt-1 ${!isIsu ? "text-white/80" : "text-[var(--text-mute)]"}`}>Any email · Pillar key + admin review</div>
           </button>
         </div>
 
@@ -88,7 +88,7 @@ export default function Register() {
                 data-testid="register-key-input"
               />
               <div className="mt-2 text-[10px] fp-mono uppercase tracking-[0.2em] text-[var(--text-mute)]">
-                Champions get one. For life.
+                Pillars get one. For life.
               </div>
             </div>
           )}
@@ -127,7 +127,7 @@ export default function Register() {
           <div className="text-[10px] fp-mono uppercase tracking-[0.25em] text-[var(--text-mute)] leading-relaxed">
             {isIsu
               ? "An ISU email proves you. We'll send a 6-digit code, you verify, you're in."
-              : "Without an ISU email, your champion vouches for you. The admin still has the final word."}
+              : "Without an ISU email, your pillar vouches for you. The admin still has the final word."}
           </div>
         </form>
 

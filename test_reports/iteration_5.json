@@ -1,0 +1,48 @@
+{
+  "summary": "Iter 5 (Pillar rename + rate limits + batch admin + leaderboard + recommender flags) tested. Backend pytest: 39/39 PASSED. Frontend smoke: nav '★ The Pillars' with testid nav-pillars, /pillars and /champions both render pillar-hero, Admin shows 4 tabs (pending/keys/logs/board), batch-toolbar with select-all toggling enabled state on approve/reject buttons, leaderboard-list renders. Korean rate-limit message confirmed visible to user during login flow ('요청이 너무 많습니다. 잠시 후 다시 시도해주세요.').",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "/api/auth/forgot-password & /api/auth/login", "issue": "slowapi moving-window is mildly flaky on sequential calls — sometimes 5 sequential forgot-password / 13 sequential login calls go through before the 429 fires. Limit eventually triggers; tests had to be widened to 8/25 calls. Acceptable with default in-memory storage; consider switching to fixed-window or Redis-backed storage for stricter cap."},
+      {"endpoint": "/api/auth/resend-otp & /api/auth/forgot-password", "issue": "logger.info(\"OTP resend for ... (dev): {code}\") on line 411 and \"Password reset for ... (dev token): {token}\" on line 454 are NOT gated behind DEV_MODE. Only _issue_otp (line 296-297) is gated. APP_ENV=prod will still log resend-OTPs and password-reset tokens in plaintext."},
+      {"endpoint": "rate limit (any per-IP)", "issue": "All tests share the proxy IP behind k8s ingress, so /auth/login's 10/min globally throttles ALL admins/users from any browser at once. Consider keying on (ip, email) for login OR allowing admin@iastate.edu a higher quota. Currently any test/login burst will lock out real users for 60s."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "PostDetail (/posts/:id) on a Pillar post", "issue": "pillar-badge data-testid not present on post-detail page when navigating from /pillars list (pillar item exists but no badge rendered on detail). May be conditional on is_pillar=true vs is_champion mirror or the post was a boosted-but-not-yet-pillar entry from /pillars (which also returns boost_likes>0 posts).", "selector": "[data-testid='pillar-badge']", "priority": "MEDIUM"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Top nav", "issues": ["Visible nav reads '★ The Pillars' (Title Case) but problem statement specified '★ THE PILLARS' all-caps. Cosmetic — fix via CSS uppercase."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/backend_test.py",
+    "/app/test_reports/pytest/iter5.xml"
+  ],
+  "action_items": [
+    "Gate logger.info('OTP resend for ...') (server.py:411) and logger.info('Password reset for ...') (server.py:454) behind DEV_MODE to fully implement APP_ENV=prod log suppression",
+    "Verify pillar-badge renders on /posts/{pillar_post_id} detail page; if currently scoped to is_pillar only, ensure mirrored is_champion (or boosted) posts also surface the badge or filter list accordingly",
+    "Apply CSS uppercase to nav-pillars text to match spec ('★ THE PILLARS')",
+    "(Optional) Switch slowapi storage to fixed-window or Redis for tighter accuracy & shared state across workers/instances",
+    "(Optional) Per (ip,email) login limiter to avoid throttling real users when one IP misbehaves"
+  ],
+  "critical_code_review_comments": [
+    "server.py is now ~1210 lines (was 1090). Strongly recommend splitting into routers (auth, admin, pillars, posts, messages) — 73% over the 700-line guideline.",
+    "Two log lines (lines 411, 454) bypass DEV_MODE gating — leaks OTP/reset-tokens in prod logs.",
+    "Rate-limit decorators are correctly placed (slowapi @limiter.limit BELOW @api.post) and request: Request is first positional param — correct.",
+    "/admin/batch-approve and /batch-reject sequentially await send_admin_decision per uid; for 50+ users this serially waits on Resend. Wrap in asyncio.gather.",
+    "_migrate_pillar_rename runs on every startup — fine since $rename is idempotent, but the initial scan is unbounded; add a one-time flag in a meta collection."
+  ],
+  "updated_files": [
+    "/app/backend/tests/backend_test.py"
+  ],
+  "success_rate": {"backend": "100% (39/39 pytest)", "frontend": "Smoke 90% — Pillar nav/route/alias, 4 admin tabs, batch toolbar enable/disable, leaderboard, Pillar copy verified. Pillar-badge on post-detail not seen."},
+  "test_credentials": "Admin: admin@iastate.edu / admin123. Test users created via /api/auth/register/isu (random test_<hex>@iastate.edu) and /api/auth/register/invite (ext_<hex>@gmail.com).",
+  "seed_data_creation": "Tests created ~10 new pending invite users + ~10 ISU test users + ~20 fresh recommendation keys. ~41 pending invite-gate users now visible in /admin (carry-over plus new). Rate-limit tests intentionally generated 25+ failed login attempts and 8+ forgot-password attempts.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Test file: /app/backend/tests/backend_test.py (39 tests). Key helpers: _admin_session() retries on 429 with sleep(62); _register_invite() retries on 429; TestZRateLimits class is intentionally last to avoid poisoning per-IP login bucket. Slow-running suite (~2.5min) due to 60s rate-limit recovery sleeps. To rerun without sleeps, comment out TestZRateLimits class. Frontend testids verified: nav-pillars, pillar-hero, pillar-list, pillar-{id}, tab-{pending|keys|logs|board}, batch-toolbar, select-all, select-{uid}, batch-approve-btn, batch-reject-btn, leaderboard-list, board-row-{id}. Not verified live: flag-{name} badges (no suspicious recommender data present); pillar-badge on PostDetail.",
+  "rca of the issue": "N/A — no failing tests. Two minor implementation gaps documented in action_items (DEV_MODE gating on 2 log lines, pillar-badge visibility on post detail)."
+}

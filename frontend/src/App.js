@@ -14,7 +14,7 @@ import PostDetail from "@/pages/PostDetail";
 import NewPost from "@/pages/NewPost";
 import Messages from "@/pages/Messages";
 import Profile from "@/pages/Profile";
-import ChampionBoard from "@/pages/ChampionBoard";
+import Pillars from "@/pages/Pillars";
 import Admin from "@/pages/Admin";
 import AppShell from "@/components/AppShell";
 import { Toaster } from "@/components/ui/sonner";
@@ -87,7 +87,8 @@ export default function App() {
 
             <Route element={<StatusGate><AppShell /></StatusGate>}>
               <Route path="/feed" element={<Feed />} />
-              <Route path="/champions" element={<ChampionBoard />} />
+              <Route path="/pillars" element={<Pillars />} />
+              <Route path="/champions" element={<Pillars />} />
               <Route path="/post/new" element={<NewPost />} />
               <Route path="/post/:id" element={<PostDetail />} />
               <Route path="/messages" element={<Messages />} />
