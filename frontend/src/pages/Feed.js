@@ -165,7 +165,7 @@ function SlotHeader({ status, now, onCompose }) {
           {status.today_key}
         </div>
         {status.keyword && (
-          <div className="text-[10px] uppercase tracking-[0.4em] fp-mono text-[var(--red)] font-bold animate-pulse">
+          <div className="text-[14px] uppercase tracking-[0.2em] fp-mono text-[var(--red)] font-black animate-pulse border border-[var(--red)]/30 px-3 py-1 bg-[var(--red)]/5 rounded-full">
             Today's Keyword: {status.keyword}
           </div>
         )}
