@@ -223,6 +223,7 @@ class LoginIn(BaseModel):
 
 class VerifyOtpIn(BaseModel):
     code: str = Field(min_length=6, max_length=6)
+    access_token: Optional[str] = None
 
 
 class ForgotIn(BaseModel):
@@ -391,7 +392,31 @@ async def register_invite(request: Request, body: RegisterInviteIn, response: Re
 
 
 @api.post("/auth/verify-otp")
-async def verify_otp(body: VerifyOtpIn, user: dict = Depends(get_current_user)):
+async def verify_otp(request: Request, body: VerifyOtpIn):
+    # Support mobile clients that cannot persist/send cookies by allowing
+    # the access token to be supplied in the request body as `access_token`.
+    token = request.cookies.get("access_token")
+    if not token:
+        h = request.headers.get("Authorization", "")
+        if h.startswith("Bearer "):
+            token = h[7:]
+    if not token and body.access_token:
+        token = body.access_token
+    if not token:
+        raise HTTPException(401, "Not authenticated")
+    try:
+        payload = jwt.decode(token, get_jwt_secret(), algorithms=[JWT_ALGORITHM])
+        if payload.get("type") != "access":
+            raise HTTPException(401, "Invalid token type")
+        user = await db.users.find_one({"id": payload["sub"]}, {"_id": 0})
+        if not user:
+            raise HTTPException(401, "User not found")
+        user.pop("password_hash", None)
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(401, "Token expired")
+    except jwt.InvalidTokenError:
+        raise HTTPException(401, "Invalid token")
+
     if user.get("status") not in ("pending_email",):
         raise HTTPException(400, "이미 인증된 계정입니다.")
     rec = await db.email_otps.find_one({"user_id": user["id"]}, {"_id": 0})

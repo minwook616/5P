@@ -7,7 +7,7 @@ import resend
 
 logger = logging.getLogger("5p.email")
 resend.api_key = os.environ.get("RESEND_API_KEY", "")
-SENDER = os.environ.get("SENDER_EMAIL", "onboarding@resend.dev")
+SENDER = os.environ.get("SENDER_EMAIL", "CampusTalk <no-reply@ia5p.com>")
 APP_NAME = os.environ.get("APP_NAME", "5P")
 PUBLIC_BASE_URL = os.environ.get("PUBLIC_BASE_URL", "")
 
