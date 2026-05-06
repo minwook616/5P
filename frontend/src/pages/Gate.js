@@ -1,9 +1,11 @@
 import { Link } from "react-router-dom";
+import FloatingRules from "@/components/FloatingRules";
 
 export default function Gate() {
   return (
-    <div className="min-h-screen bg-[var(--bg)] text-[var(--text)] flex flex-col">
-      <div className="flex-1 flex items-center justify-center">
+    <div className="min-h-screen bg-[var(--bg)] text-[var(--text)] flex flex-col relative">
+      <FloatingRules />
+      <div className="flex-1 flex items-center justify-center relative z-10">
         <div className="text-center fp-fade">
           <div className="font-bold text-[88px] sm:text-[140px] leading-none tracking-tighter">
             5P<span className="text-[var(--red)]">.</span>

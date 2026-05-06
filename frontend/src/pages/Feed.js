@@ -225,7 +225,9 @@ function SlotHeader({ status, now, onCompose }) {
 }
 
 export function relTime(iso) {
+  if (!iso) return "";
   const t = new Date(iso).getTime();
+  if (isNaN(t)) return "";
   const diff = Date.now() - t;
   const m = Math.floor(diff / 60000);
   if (m < 1) return "Just now";

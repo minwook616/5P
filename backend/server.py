@@ -1053,7 +1053,8 @@ async def admin_pending_v2(_: dict = Depends(require_admin)):
             # Suspicion heuristics
             flags = []
             if r and not r.get("is_admin"):
-                age_days = (now_utc() - datetime.fromisoformat(r["created_at"])).total_seconds() / 86400
+                r_ca = ensure_aware(r.get("created_at"))
+                age_days = (now_utc() - r_ca).total_seconds() / 86400 if r_ca else 0
                 if invites_n > 10:
                     flags.append("HIGH_VOLUME")
                 if age_days < 7 and invites_n > 3:

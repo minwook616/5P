@@ -3,10 +3,12 @@ import { useParams, useNavigate } from "react-router-dom";
 import api, { formatApiError } from "@/lib/api";
 import { toast } from "sonner";
 import { relTime } from "@/pages/Feed";
+import { useAuth } from "@/context/AuthContext";
 
 export default function Messages() {
   const { convId } = useParams();
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [conversations, setConversations] = useState([]);
   const [thread, setThread] = useState(null);
   const [text, setText] = useState("");
@@ -50,13 +52,12 @@ export default function Messages() {
 
 const send = async (e) => {
     e.preventDefault();
-    if (!text.trim() || !thread) return;
+    if (!text.trim() || !thread || !user) return;
     try {
       const baseCid = convId.replace("::admin_line", "");
       const parts = baseCid.split("__"); // 예: ["user1", "user2", "postId"]
       
-      const meRes = await api.get("/auth/me");
-      const me = meRes.data;
+      const me = user;
       
       // 1. 상대방 ID 찾기 (parts[0] 또는 parts[1])
       const r = parts[0] === me.id ? parts[1] : parts[0];

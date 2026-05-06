@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
 import { formatApiError } from "@/lib/api";
 import { toast } from "sonner";
+import FloatingRules from "@/components/FloatingRules";
 
 export default function Login() {
   const { login } = useAuth();
@@ -29,8 +30,9 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center px-6 py-10">
-      <div className="w-full max-w-sm fp-fade">
+    <div className="min-h-screen flex items-center justify-center px-6 py-10 relative overflow-hidden">
+      <FloatingRules />
+      <div className="w-full max-w-sm fp-fade relative z-10">
         <Link to="/" className="text-xs uppercase tracking-[0.3em] fp-mono text-[var(--text-mute)] hover:text-[var(--text)]" data-testid="back-link">
           ← Back
         </Link>
