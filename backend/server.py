@@ -82,6 +82,19 @@ def now_utc() -> datetime:
     return datetime.now(timezone.utc)
 
 
+def ensure_aware(dt) -> Optional[datetime]:
+    if dt is None:
+        return None
+    if isinstance(dt, str):
+        try:
+            dt = datetime.fromisoformat(dt)
+        except Exception:
+            return None
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=timezone.utc)
+    return dt
+
+
 def now_local() -> datetime:
     return datetime.now(TZ)
 
@@ -874,7 +887,8 @@ async def list_conversations(user: dict = Depends(require_active)):
         if cid in seen:
             continue
         is_admin_line = m.get("admin_line", False)
-        if is_admin_line and m["created_at"] < cutoff:
+        m_ca = ensure_aware(m.get("created_at"))
+        if is_admin_line and m_ca and m_ca < cutoff:
             continue
         other_id = m["recipient_id"] if m["sender_id"] == user["id"] else m["sender_id"]
         unread = await db.messages.count_documents({
@@ -887,7 +901,7 @@ async def list_conversations(user: dict = Depends(require_active)):
             "label": label,
             "is_admin_line": is_admin_line,
             "last_message": m["content"],
-            "last_at": m["created_at"],
+            "last_at": m_ca.isoformat() if m_ca else None,
             "unread": unread,
         }
     s = await compute_status(user)
@@ -929,12 +943,20 @@ async def get_thread(conv_id: str, user: dict = Depends(require_active)):
         {"$set": {"read": True}},
     )
     other_label = "운영자 비밀 통로" if is_admin_line else anon_handle(other_id, base_cid)
+    
+    res_msgs = []
+    for m in msgs:
+        m_ca = ensure_aware(m.get("created_at"))
+        res_msgs.append({
+            "id": m.get("id", str(uuid.uuid4())), 
+            "content": m["content"], 
+            "from_me": m["sender_id"] == user["id"], 
+            "created_at": m_ca.isoformat() if m_ca else None
+        })
+
     return {
         "conv_id": conv_id, "is_admin_line": is_admin_line, "other_label": other_label,
-        "messages": [
-            {"id": m["id"], "content": m["content"], "from_me": m["sender_id"] == user["id"], "created_at": m["created_at"]}
-            for m in msgs
-        ],
+        "messages": res_msgs,
     }
 
 
