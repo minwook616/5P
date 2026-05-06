@@ -70,12 +70,12 @@ export default function AppShell() {
                 <span className="text-[var(--text)]">1 post per person daily.</span>
               </div>
               <div>
-                <span className="text-[var(--red)] block mb-1">03. Daily Reset</span>
-                <span className="text-[var(--text)]">Access refreshes every midnight.</span>
+                <span className="text-[var(--red)] block mb-1">03. Auto-Purge</span>
+                <span className="text-[var(--text)]">Everything vanishes after 24h.</span>
               </div>
               <div>
-                <span className="text-[var(--red)] block mb-1">04. Auto-Purge</span>
-                <span className="text-[var(--text)]">Everything vanishes after 24h.</span>
+                <span className="text-[var(--red)] block mb-1">04. The Pillars</span>
+                <span className="text-[var(--text)]">15+ likes promote you to Pillar status and grant an invite key.</span>
               </div>
               <div>
                 <span className="text-[var(--red)] block mb-1">05. Clean Community</span>

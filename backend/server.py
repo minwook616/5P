@@ -557,8 +557,8 @@ async def get_or_create_daily_state(date_key: str) -> dict:
             pillar_id = ranked[0]["author_id"]
             
     start = day_start_local(date_key)
-    offset = random.randint(0, 3599)
-    unlock_at = start + timedelta(seconds=offset)
+    # Disabled random offset for Golden Hour - posts unlock immediately at midnight
+    unlock_at = start
     
     # New: Random daily keyword
     keywords = ["Midterm", "CyRide", "Cy", "Parks Library", "Campanile", "Lake LaVerne", "State Gym", "MU", "Beardshear", "Ames"]
