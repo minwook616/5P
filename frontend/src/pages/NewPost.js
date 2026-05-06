@@ -74,6 +74,21 @@ export default function NewPost() {
         </div>
 
         <div>
+          <label className="block text-[13px] uppercase tracking-[0.3em] fp-mono text-[var(--text-mute)] mb-2">Location</label>
+          <select 
+            className="fp-input"
+            value={location}
+            onChange={(e) => setLocation(e.target.value)}
+            data-testid="location-select"
+          >
+            <option value="">(어디쯤 계신가요?)</option>
+            {locations.map((loc) => (
+              <option key={loc} value={loc}>{loc}</option>
+            ))}
+          </select>
+        </div>
+
+        <div>
           <label className="block text-[13px] uppercase tracking-[0.3em] fp-mono text-[var(--text-mute)] mb-2">Body</label>
           <textarea
             className="fp-input min-h-[260px] resize-y leading-relaxed"
@@ -90,19 +105,6 @@ export default function NewPost() {
         <div className="flex justify-end gap-3 pt-4 border-t border-[var(--line)]">
           <button type="button" onClick={() => navigate(-1)} className="fp-btn" data-testid="cancel-btn">Cancel</button>
           <button
-            type="submit"
-            disabled={submitting || !status?.can_post_now}
-            className="fp-btn fp-btn-red"
-            data-testid="submit-btn"
-          >
-            {submitting ? "..." : "Publish"}
-          </button>
-        </div>
-      </form>
-    </div>
-  );
-}
-       <button
             type="submit"
             disabled={submitting || !status?.can_post_now}
             className="fp-btn fp-btn-red"

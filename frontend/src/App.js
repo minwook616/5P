@@ -75,6 +75,7 @@ export default function App() {
     <div className="App">
       <AuthProvider>
         <BrowserRouter>
+          <MessageNotifier />
           <Routes>
             <Route path="/" element={<PublicOnly><Gate /></PublicOnly>} />
             <Route path="/login" element={<PublicOnly><Login /></PublicOnly>} />
