@@ -104,7 +104,6 @@ export default function Feed() {
         <h3 className="text-xl font-bold tracking-tight group-hover:text-[var(--text)] text-[var(--text)] mb-2">
           {p.title}
         </h3>
-        <p className="text-sm text-[var(--text-dim)] line-clamp-2 leading-relaxed">{p.content}</p>
       </div>
       <div className="relative z-10 mt-4 flex items-center gap-6 text-[13px] uppercase tracking-[0.3em] fp-mono text-gray-300">
         <button
