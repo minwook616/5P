@@ -18,6 +18,7 @@ import Pillars from "@/pages/Pillars";
 import Admin from "@/pages/Admin";
 import AppShell from "@/components/AppShell";
 import { Toaster } from "@/components/ui/sonner";
+import MessageNotifier from "@/components/MessageNotifier";
 
 function Loading() {
   return (

@@ -7,8 +7,17 @@ export default function NewPost() {
   const navigate = useNavigate();
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
+  const [location, setLocation] = useState("");
   const [status, setStatus] = useState(null);
   const [submitting, setSubmitting] = useState(false);
+
+  const locations = [
+    "Parks Library 어딘가",
+    "Campanile 종소리가 들리는 곳",
+    "어느 기숙사 방 안",
+    "CyRide 버스 안",
+    "랩실 구석"
+  ];
 
   useEffect(() => {
     api.get("/status/today").then((r) => setStatus(r.data)).catch(() => {});
@@ -22,7 +31,7 @@ export default function NewPost() {
     }
     setSubmitting(true);
     try {
-      const { data } = await api.post("/posts", { title, content });
+      const { data } = await api.post("/posts", { title, content, location });
       toast.success("작성되었습니다.");
       navigate(`/post/${data.id}`);
     } catch (err) {
@@ -81,6 +90,19 @@ export default function NewPost() {
         <div className="flex justify-end gap-3 pt-4 border-t border-[var(--line)]">
           <button type="button" onClick={() => navigate(-1)} className="fp-btn" data-testid="cancel-btn">Cancel</button>
           <button
+            type="submit"
+            disabled={submitting || !status?.can_post_now}
+            className="fp-btn fp-btn-red"
+            data-testid="submit-btn"
+          >
+            {submitting ? "..." : "Publish"}
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}
+       <button
             type="submit"
             disabled={submitting || !status?.can_post_now}
             className="fp-btn fp-btn-red"

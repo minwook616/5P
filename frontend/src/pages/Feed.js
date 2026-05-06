@@ -85,24 +85,39 @@ export default function Feed() {
       key={p.id}
       onClick={() => navigate(`/post/${p.id}`)}
       className={`relative overflow-hidden py-8 px-8 cursor-pointer group bg-[#111111] border rounded-2xl transition-all duration-300 shadow-lg ${getLikeStyle(p.like_count)}`}
-      style={isPillarLevel ? {
-        borderColor: "rgba(212,175,55,0.4)",
-        background: "linear-gradient(135deg, rgba(200,16,46,0.04), rgba(212,175,55,0.02))"
-      } : {}}
+      style={{
+        ...(isPillarLevel ? {
+          borderColor: "rgba(212,175,55,0.4)",
+          background: "linear-gradient(135deg, rgba(200,16,46,0.04), rgba(212,175,55,0.02))"
+        } : {}),
+        ...(p.has_keyword ? {
+          borderColor: "var(--red)",
+          boxShadow: "0 0 25px rgba(200, 16, 46, 0.15)"
+        } : {})
+      }}
     >
       {isPillarLevel && (
         <div className="absolute top-0 left-0 w-1 h-full" style={{background: "linear-gradient(180deg, #D4AF37, #C8102E)"}}/>
       )}
       
-      <div className="relative z-10 flex items-center gap-3 text-[13px] uppercase tracking-[0.3em] fp-mono text-gray-300 mb-3">
+      <div className="relative z-10 flex items-center flex-wrap gap-x-3 gap-y-1 text-[13px] uppercase tracking-[0.3em] fp-mono text-gray-300 mb-3">
         <span>{p.is_admin_post ? <span className="text-[var(--red)]">{p.author_label}</span> : p.author_label}</span>
         <span>·</span>
         <span>{relTime(p.created_at)}</span>
+        {p.location && (
+          <>
+            <span>·</span>
+            <span className="text-zinc-500 italic opacity-80">{p.location}</span>
+          </>
+        )}
         {p.blinded && <><span>·</span><span className="text-[var(--red)]">Blinded</span></>}
       </div>
       <div className={`relative z-10 ${p.blinded && !user?.is_admin ? "fp-blinded" : ""}`}>
-        <h3 className="text-xl font-bold tracking-tight group-hover:text-[var(--text)] text-[var(--text)] mb-2">
+        <h3 className="text-xl font-bold tracking-tight group-hover:text-[var(--text)] text-[var(--text)] mb-2 flex items-center gap-2">
           {p.title}
+          {p.has_keyword && (
+            <span className="bg-[var(--red)] text-white text-[9px] px-1.5 py-0.5 rounded-sm tracking-widest align-middle">KEY</span>
+          )}
         </h3>
       </div>
       <div className="relative z-10 mt-4 flex items-center gap-6 text-[13px] uppercase tracking-[0.3em] fp-mono text-gray-300">
@@ -145,8 +160,15 @@ function SlotHeader({ status, now, onCompose }) {
 
   return (
     <section data-testid="slot-header">
-      <div className="text-[10px] uppercase tracking-[0.4em] fp-mono text-[var(--text-mute)] mb-3">
-        {status.today_key}
+      <div className="flex justify-between items-start mb-3">
+        <div className="text-[10px] uppercase tracking-[0.4em] fp-mono text-[var(--text-mute)]">
+          {status.today_key}
+        </div>
+        {status.keyword && (
+          <div className="text-[10px] uppercase tracking-[0.4em] fp-mono text-[var(--red)] font-bold animate-pulse">
+            Today's Keyword: {status.keyword}
+          </div>
+        )}
       </div>
       <div className="flex items-baseline gap-4 flex-wrap">
         <h1 className="font-bold text-5xl sm:text-6xl tracking-tighter" data-testid="available-headline">

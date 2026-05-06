@@ -251,6 +251,7 @@ class ResetIn(BaseModel):
 class PostIn(BaseModel):
     title: str = Field(min_length=1, max_length=80)
     content: str = Field(min_length=1, max_length=3000)
+    location: Optional[str] = None
 
 
 class CommentIn(BaseModel):
@@ -435,7 +436,9 @@ async def verify_otp(request: Request, body: VerifyOtpIn):
     rec = await db.email_otps.find_one({"user_id": user["id"]}, {"_id": 0})
     if not rec:
         raise HTTPException(400, "OTP가 발급되지 않았습니다. 재발송 해주세요.")
-    if datetime.fromisoformat(rec["expires_at"]) < now_utc():
+    
+    rec_exp = ensure_aware(rec["expires_at"])
+    if rec_exp and rec_exp < now_utc():
         await db.email_otps.delete_many({"user_id": user["id"]})
         raise HTTPException(400, "OTP가 만료되었습니다. 재발송 해주세요.")
     if rec.get("attempts", 0) >= 5:
@@ -530,7 +533,9 @@ async def reset_password(body: ResetIn):
     rec = await db.password_resets.find_one({"token": body.token, "used": False}, {"_id": 0})
     if not rec:
         raise HTTPException(400, "유효하지 않은 토큰입니다.")
-    if datetime.fromisoformat(rec["expires_at"]) < now_utc():
+    
+    rec_exp = ensure_aware(rec["expires_at"])
+    if rec_exp and rec_exp < now_utc():
         raise HTTPException(400, "토큰이 만료되었습니다.")
     await db.users.update_one({"id": rec["user_id"]}, {"$set": {"password_hash": hash_password(body.password)}})
     await db.password_resets.update_one({"token": body.token}, {"$set": {"used": True}})
@@ -542,6 +547,7 @@ async def get_or_create_daily_state(date_key: str) -> dict:
     state = await db.daily_state.find_one({"date_key": date_key}, {"_id": 0})
     if state:
         return state
+    
     pillar_id = None
     yk = (datetime.strptime(date_key, "%Y-%m-%d") - timedelta(days=1)).strftime("%Y-%m-%d")
     yest_posts = await db.posts.find({"date_key": yk}, {"_id": 0}).to_list(50)
@@ -549,13 +555,20 @@ async def get_or_create_daily_state(date_key: str) -> dict:
         ranked = sorted(yest_posts, key=lambda p: total_likes_of(p), reverse=True)
         if ranked and total_likes_of(ranked[0]) > 0:
             pillar_id = ranked[0]["author_id"]
+            
     start = day_start_local(date_key)
     offset = random.randint(0, 3599)
     unlock_at = start + timedelta(seconds=offset)
+    
+    # New: Random daily keyword
+    keywords = ["Midterm", "CyRide", "Cy", "Parks Library", "Campanile", "Lake LaVerne", "State Gym", "MU", "Beardshear", "Ames"]
+    keyword = random.choice(keywords)
+    
     state = {
         "date_key": date_key,
         "unlock_at": unlock_at.astimezone(timezone.utc).isoformat(),
         "pillar_id": pillar_id,
+        "keyword": keyword,
         "created_at": now_utc().isoformat(),
     }
     try:
@@ -587,9 +600,9 @@ async def compute_status(user: dict) -> dict:
     is_pillar_today = state.get("pillar_id") == user["id"]
     user_done = await user_posted_today(user["id"], dk)
     n_utc = now_utc()
-    unlock_at = datetime.fromisoformat(state["unlock_at"])
-    if unlock_at.tzinfo is None:
-        unlock_at = unlock_at.replace(tzinfo=timezone.utc)
+    
+    unlock_at = ensure_aware(state["unlock_at"])
+    
     spectator = server_count >= SERVER_DAILY_LIMIT and not is_admin
     golden_hour_passed = n_utc >= unlock_at
     can_post_now = False
@@ -624,6 +637,7 @@ async def compute_status(user: dict) -> dict:
         "can_post_now": can_post_now,
         "block_reason": block_reason,
         "admin_daily_limit": ADMIN_DAILY_LIMIT,
+        "keyword": state.get("keyword", ""),
     }
 
 
@@ -633,15 +647,22 @@ async def today_status(user: dict = Depends(require_active)):
 
 
 # ---------------- Posts ----------------
-def serialize_post(p: dict, viewer: dict) -> dict:
+def serialize_post(p: dict, viewer: dict, daily_keyword: Optional[str] = None) -> dict:
     is_blinded = len(p.get("reports", [])) >= 3
     is_admin = viewer.get("is_admin", False)
     show_real = is_admin
     is_pillar_post = p.get("is_pillar", p.get("is_champion", False)) or total_likes_of(p) >= PILLAR_THRESHOLD
+    
+    # Check for keyword match
+    has_keyword = False
+    if daily_keyword and daily_keyword.lower() in p.get("content", "").lower():
+        has_keyword = True
+
     return {
         "id": p["id"],
         "title": p["title"] if not is_blinded or is_admin else "블라인드 처리된 글",
         "content": p["content"] if not is_blinded or is_admin else "부적절한 내용으로 블라인드 처리되었습니다.",
+        "location": p.get("location"),
         "blinded": is_blinded,
         "author_label": ("운영자" if p.get("author_is_admin") else f"#{p.get('slot', 0)}") if not show_real else p.get("author_email", "?"),
         "author_id": p.get("author_id") if is_admin else None,
@@ -657,6 +678,7 @@ def serialize_post(p: dict, viewer: dict) -> dict:
         "report_count": len(p.get("reports", [])) if is_admin else None,
         "is_pillar": is_pillar_post,
         "is_champion": is_pillar_post,
+        "has_keyword": has_keyword,
         "created_at": p["created_at"],
     }
 
@@ -694,6 +716,7 @@ async def create_post(body: PostIn, user: dict = Depends(require_active)):
         "id": str(uuid.uuid4()),
         "title": body.title.strip(),
         "content": body.content.strip(),
+        "location": body.location, # Store location
         "author_id": user["id"],
         "author_email": user["email"],
         "author_is_admin": user.get("is_admin", False),
@@ -707,28 +730,35 @@ async def create_post(body: PostIn, user: dict = Depends(require_active)):
         "created_at": created,
     }
     await db.posts.insert_one(doc)
-    return serialize_post(doc, user)
+    return serialize_post(doc, user, s.get("keyword"))
 
 
 @api.get("/posts")
 async def list_posts(date_key: Optional[str] = None, user: dict = Depends(require_active)):
     if not date_key:
         date_key = today_key()
+    
+    state = await get_or_create_daily_state(date_key)
+    kw = state.get("keyword")
         
     q = {"date_key": date_key}
     cursor = db.posts.find(q, {"_id": 0}).sort("created_at", -1).limit(200)
     items = await cursor.to_list(200)
-    return [serialize_post(p, user) for p in items]
+    return [serialize_post(p, user, kw) for p in items]
 
 
 @api.get("/pillars")
 async def list_pillars(user: dict = Depends(require_active)):
+    dk = today_key()
+    state = await get_or_create_daily_state(dk)
+    kw = state.get("keyword")
+
     cursor = db.posts.find(
         {"$or": [{"is_pillar": True}, {"is_champion": True}, {"boost_likes": {"$gt": 0}}]}, {"_id": 0}
     ).sort([("pillar_at", -1), ("created_at", -1)]).limit(500)
     items = await cursor.to_list(500)
     items = [p for p in items if total_likes_of(p) >= PILLAR_THRESHOLD or p.get("is_pillar") or p.get("is_champion")]
-    return [serialize_post(p, user) for p in items]
+    return [serialize_post(p, user, kw) for p in items]
 
 
 # Backwards-compat alias
@@ -742,7 +772,9 @@ async def get_post(pid: str, user: dict = Depends(require_active)):
     p = await db.posts.find_one({"id": pid}, {"_id": 0})
     if not p:
         raise HTTPException(404, "게시글을 찾을 수 없습니다.")
-    return serialize_post(p, user)
+    
+    state = await get_or_create_daily_state(p["date_key"])
+    return serialize_post(p, user, state.get("keyword"))
 
 
 @api.post("/posts/{pid}/like")
@@ -998,6 +1030,12 @@ async def send_message(body: MessageIn, user: dict = Depends(require_active)):
         
     await db.messages.insert_one(doc)
     return {"id": doc["id"], "content": doc["content"], "from_me": True, "created_at": doc["created_at"], "conv_id": cid}
+
+
+@api.get("/messages/unread-count")
+async def get_unread_count(user: dict = Depends(require_active)):
+    count = await db.messages.count_documents({"recipient_id": user["id"], "read": False})
+    return {"count": count}
 
 
 @api.post("/messages/start/{post_id}")
@@ -1514,6 +1552,12 @@ async def startup():
         any_key = await db.recommendation_keys.find_one({"owner_id": existing["id"], "used": False}, {"_id": 0})
         if not any_key:
             await mint_key(existing["id"], source="founder")
+
+
+@app.on_event("startup")
+async def startup_v2():
+    # Placeholder for version 2 startup if needed
+    pass
 
 
 @app.on_event("shutdown")
