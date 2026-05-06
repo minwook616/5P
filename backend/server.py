@@ -53,7 +53,7 @@ CHAMPION_THRESHOLD = int(os.environ.get("PILLAR_THRESHOLD", os.environ.get("CHAM
 PILLAR_THRESHOLD = CHAMPION_THRESHOLD
 APP_ENV = os.environ.get("APP_ENV", "dev").lower()
 DEV_MODE = APP_ENV != "prod"
-FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:3000") # 업데이트 필요
+FRONTEND_URL = os.getenv("FRONTEND_URL", "https://ia5p.com") # 업데이트 필요
 
 mongo_url = os.environ["MONGO_URL"]
 client = AsyncIOMotorClient(mongo_url)
