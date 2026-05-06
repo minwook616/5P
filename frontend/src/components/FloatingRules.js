@@ -10,38 +10,39 @@ const rules = [
 
 export default function FloatingRules() {
   return (
-    <div className="fixed inset-0 pointer-events-none overflow-hidden z-0 select-none opacity-[0.07]">
+    <div className="fixed inset-0 pointer-events-none overflow-hidden z-0 select-none" style={{ opacity: 0.15 }}>
       <style>{`
         @keyframes float-up {
-          from { transform: translateY(105vh) rotate(-5deg); }
-          to { transform: translateY(-10vh) rotate(5deg); }
+          from { transform: translateY(110vh) rotate(-3deg); }
+          to { transform: translateY(-20vh) rotate(3deg); }
         }
         @keyframes float-down {
-          from { transform: translateY(-10vh) rotate(5deg); }
-          to { transform: translateY(105vh) rotate(-5deg); }
+          from { transform: translateY(-20vh) rotate(3deg); }
+          to { transform: translateY(110vh) rotate(-3deg); }
         }
         @keyframes float-left {
-          from { transform: translateX(105vw) rotate(5deg); }
-          to { transform: translateX(-20vw) rotate(-5deg); }
+          from { transform: translateX(110vw) rotate(3deg); }
+          to { transform: translateX(-50vw) rotate(-3deg); }
         }
         @keyframes float-right {
-          from { transform: translateX(-20vw) rotate(-5deg); }
-          to { transform: translateX(105vw) rotate(5deg); }
+          from { transform: translateX(-50vw) rotate(-3deg); }
+          to { transform: translateX(110vw) rotate(3deg); }
         }
         @keyframes float-diag {
-          from { transform: translate(-10vw, -10vh) rotate(0deg); }
-          to { transform: translate(100vw, 100vh) rotate(10deg); }
+          from { transform: translate(-20vw, -20vh) rotate(0deg); }
+          to { transform: translate(110vw, 110vh) rotate(5deg); }
         }
 
         .floating-rule {
           position: absolute;
           white-space: nowrap;
           font-family: 'IBM Plex Mono', monospace;
-          font-size: 16px;
-          font-weight: 800;
-          letter-spacing: 0.05em;
-          color: var(--text);
-          text-shadow: 0 0 10px rgba(255,255,255,0.1);
+          font-size: 18px;
+          font-weight: 900;
+          letter-spacing: 0.02em;
+          color: #ffffff;
+          text-shadow: 0 0 15px rgba(0,0,0,0.5);
+          filter: drop-shadow(0 0 5px rgba(255,255,255,0.1));
         }
       `}</style>
       
