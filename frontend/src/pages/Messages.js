@@ -48,16 +48,29 @@ export default function Messages() {
     return () => clearInterval(t);
   }, [loadThread]);
 
-  const send = async (e) => {
+const send = async (e) => {
     e.preventDefault();
     if (!text.trim() || !thread) return;
     try {
       const baseCid = convId.replace("::admin_line", "");
-      const parts = baseCid.split("__");
+      const parts = baseCid.split("__"); // 예: ["user1", "user2", "postId"]
+      
       const meRes = await api.get("/auth/me");
       const me = meRes.data;
+      
+      // 1. 상대방 ID 찾기 (parts[0] 또는 parts[1])
       const r = parts[0] === me.id ? parts[1] : parts[0];
-      const { data } = await api.post("/messages", { recipient_id: r, content: text });
+      
+      // 2. convId의 3번째 파트에서 post_id 추출하기 (추가된 부분)
+      const p = parts[2]; 
+
+      // 3. API 요청 시 post_id를 포함해서 보냄 (수정된 부분)
+      const { data } = await api.post("/messages", { 
+        recipient_id: r, 
+        content: text,
+        post_id: p  // 백엔드에서 이 값을 보고 새로운 방을 만들거나 찾게 됩니다.
+      });
+
       setThread((t) => t ? { ...t, messages: [...t.messages, data] } : t);
       setText("");
       setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: "smooth" }), 50);
