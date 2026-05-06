@@ -53,24 +53,6 @@ export default function Feed() {
 
   return (
     <div className="space-y-12 pb-20">
-      {/* Informational badges, artistically scattered around the feed */}
-      <div aria-hidden className="pointer-events-none">
-        <div className="fixed top-6 left-6 max-w-[220px]">
-          <div className="bg-zinc-900/60 backdrop-blur-sm border border-white/6 text-[13px] text-zinc-100 fp-mono px-4 py-2 rounded-lg shadow-md">하루에 딱 5개의 글만 올라옵니다.</div>
-        </div>
-        <div className="fixed top-6 right-6 max-w-[220px]">
-          <div className="bg-zinc-900/60 backdrop-blur-sm border border-white/6 text-[13px] text-zinc-100 fp-mono px-4 py-2 rounded-lg shadow-md">한 명당 하루에 1개의 글만 작성 가능합니다.</div>
-        </div>
-        <div className="fixed bottom-6 left-6 max-w-[220px]">
-          <div className="bg-zinc-900/60 backdrop-blur-sm border border-white/6 text-[13px] text-zinc-100 fp-mono px-4 py-2 rounded-lg shadow-md">매일 오전 12시(자정)에 작성 권한이 초기화됩니다.</div>
-        </div>
-        <div className="fixed bottom-6 right-6 max-w-[220px]">
-          <div className="bg-zinc-900/60 backdrop-blur-sm border border-white/6 text-[13px] text-zinc-100 fp-mono px-4 py-2 rounded-lg shadow-md">비방, 욕설, 광고글은 운영자나 Pillar가 즉시 삭제합니다.</div>
-        </div>
-        <div className="fixed top-24 left-1/2 transform -translate-x-1/2 max-w-[560px]">
-          <div className="bg-gradient-to-r from-[#0f1724]/60 to-[#111827]/40 border border-white/6 text-[14px] text-zinc-100 fp-mono px-6 py-3 rounded-3xl shadow-2xl text-center">모든 글과 쪽지는 24시간 뒤 삭제됩니다.</div>
-        </div>
-      </div>
       <div className="bg-zinc-900/30 p-8 rounded-2xl border border-white/5 shadow-xl">
         <SlotHeader status={status} now={now} onCompose={() => navigate("/post/new")} />
       </div>
