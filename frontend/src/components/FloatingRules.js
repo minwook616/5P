@@ -5,7 +5,7 @@ const rules = [
   "Individual Limit: 1 post per user daily.",
   "Daily Reset: Access refreshes every midnight.",
   "Auto-Purge: Everything vanishes after 24h.",
-  "Community: Zero tolerance for hate or ads.",
+  "Community: No hate, ads, or real names.",
   "Anonymous: Your identity is always hidden.",
   "Five Stories: Five People. Once a day."
 ];

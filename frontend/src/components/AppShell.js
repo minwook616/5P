@@ -79,7 +79,7 @@ export default function AppShell() {
               </div>
               <div>
                 <span className="text-[var(--red)] block mb-1">05. Clean Community</span>
-                <span className="text-[var(--text)]">Zero tolerance for hate or ads.</span>
+                <span className="text-[var(--text)]">Zero tolerance for hate, ads, or real names.</span>
               </div>
             </div>
           </div>
