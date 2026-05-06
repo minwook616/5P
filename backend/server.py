@@ -560,8 +560,15 @@ async def get_or_create_daily_state(date_key: str) -> dict:
     # Disabled random offset for Golden Hour - posts unlock immediately at midnight
     unlock_at = start
     
-    # New: Random daily keyword
-    keywords = ["Midterm", "CyRide", "Cy", "Parks Library", "Campanile", "Lake LaVerne", "State Gym", "MU", "Beardshear", "Ames"]
+    # Expanded: 50+ Campus-themed keywords
+    keywords = [
+        "Midterm", "CyRide", "Cy", "Parks Library", "Campanile", "Lake LaVerne", "State Gym", "MU", "Beardshear", "Ames",
+        "Hilton Magic", "Jack Trice", "Veishea", "Cardinal", "Gold", "Cyclone", "Lancelot", "Elaine", "Zaffarano", "Carver",
+        "Pearson", "Marston", "Friley", "Helser", "Geoffroy", "State Fair", "Corn", "Iowa", "ISU", "Engineering",
+        "Design", "Business", "Vet Med", "Design", "Music Hall", "Clyde Williams", "Brookside", "Ada Hayden", "Main Street", "Duff",
+        "Welch Ave", "Jeff's Pizza", "Fighting Burrito", "Hickory Park", "Es Tas", "Panda", "Chick-fil-A", "Study Break", "All-Nighter", "Finals",
+        "Graduation", "Orientation", "Homecoming", "Tailgate", "Snow Day", "Spring Break", "Summer", "Autumn", "Winter", "Spring"
+    ]
     keyword = random.choice(keywords)
     
     state = {
