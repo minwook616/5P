@@ -1,15 +1,5 @@
 import React from 'react';
 
-const rules = [
-  "전체 제한: 하루에 딱 5개의 글만 올라옵니다.",
-  "개별 제한: 한 명당 하루에 1개의 글만 작성 가능합니다.",
-  "초기화: 매일 오전 12시(자정)에 작성 권한이 초기화됩니다.",
-  "자동 삭제: 모든 글과 쪽지는 24시간 뒤 삭제됩니다.",
-  "커뮤니티: 비방, 욕설, 광고글은 운영자나 Pillar가 즉시 삭제합니다."
-];
-
-import React from 'react';
-
 const krRules = [
   "전체 제한: 하루에 딱 5개의 글만 올라옵니다.",
   "개별 제한: 한 명당 하루에 1개의 글만 작성 가능합니다.",
@@ -27,10 +17,8 @@ const enRules = [
 ];
 
 export default function FloatingRules() {
-  const allRules = [...krRules, ...enRules];
-
   return (
-    <div className="fixed inset-0 pointer-events-none overflow-hidden select-none z-0" style={{ opacity: 0.12 }}>
+    <div className="fixed inset-0 pointer-events-none overflow-hidden select-none" style={{ zIndex: 1, opacity: 0.15 }}>
       <style>{`
         @keyframes float-up {
           from { transform: translateY(110vh) rotate(-2deg); }
@@ -61,7 +49,7 @@ export default function FloatingRules() {
           text-transform: uppercase;
           letter-spacing: 0.15em;
           color: var(--text);
-          filter: blur(0.5px);
+          filter: blur(0.3px);
         }
       `}</style>
       
