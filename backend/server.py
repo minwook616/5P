@@ -27,7 +27,7 @@ from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 from pydantic import BaseModel, Field, EmailStr
 
-from .email_service import send_otp, send_password_reset, send_admin_decision, send_key_granted
+from backend.email_service import send_otp, send_password_reset, send_admin_decision, send_key_granted
 
 from slowapi import Limiter
 from slowapi.util import get_remote_address
