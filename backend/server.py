@@ -1348,7 +1348,9 @@ async def _migrate_ttl_fields():
 
 @app.on_event("startup")
 async def startup():
-    await _migrate_pillar_rename()
+    # Run migrations only when explicitly enabled to avoid accidental production changes
+    if os.environ.get("RUN_MIGRATIONS", "false").lower() == "true":
+        await _migrate_pillar_rename()
     await db.users.create_index("email", unique=True)
     await db.users.create_index("id", unique=True)
     await db.users.create_index("status")
@@ -1374,8 +1376,9 @@ async def startup():
     except Exception as e:
         logger.warning(f"Creating TTL indices failed: {e}")
 
-    # Backfill existing documents with proper Date types and expireAt
-    await _migrate_ttl_fields()
+    # Backfill existing documents with proper Date types and expireAt (only when enabled)
+    if os.environ.get("RUN_MIGRATIONS", "false").lower() == "true":
+        await _migrate_ttl_fields()
 
     pw = os.environ.get("ADMIN_PASSWORD", "admin123")
     existing = await db.users.find_one({"email": ADMIN_EMAIL})
