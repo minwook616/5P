@@ -312,6 +312,8 @@ async def _issue_otp(uid: str, email: str):
     await send_otp(email, code)
     if DEV_MODE:
         logger.info(f"OTP for {email} (dev): {code}")
+        return code
+    return None
 
 
 async def _log_invite(invited: dict, recommender: Optional[dict], gate: str):
@@ -348,12 +350,15 @@ async def register_isu(request: Request, body: RegisterIsuIn, response: Response
         "created_at": now_utc().isoformat(), "reviewed_at": None,
     }
     await db.users.insert_one(doc)
-    await _issue_otp(uid, email)
+    otp_code = await _issue_otp(uid, email)
 
     access = create_access_token(uid, email)
     refresh = create_refresh_token(uid)
     set_auth_cookies(response, access, refresh)
-    return {"user": public_user(doc), "access_token": access, "refresh_token": refresh}
+    resp = {"user": public_user(doc), "access_token": access, "refresh_token": refresh}
+    if otp_code:
+        resp["dev_otp"] = otp_code
+    return resp
 
 
 @api.post("/auth/register/invite")
