@@ -10,37 +10,38 @@ const rules = [
 
 export default function FloatingRules() {
   return (
-    <div className="fixed inset-0 pointer-events-none overflow-hidden z-0 select-none opacity-[0.03]">
+    <div className="fixed inset-0 pointer-events-none overflow-hidden z-0 select-none opacity-[0.07]">
       <style>{`
         @keyframes float-up {
-          from { transform: translateY(110vh) rotate(-5deg); }
+          from { transform: translateY(105vh) rotate(-5deg); }
           to { transform: translateY(-10vh) rotate(5deg); }
         }
         @keyframes float-down {
           from { transform: translateY(-10vh) rotate(5deg); }
-          to { transform: translateY(110vh) rotate(-5deg); }
+          to { transform: translateY(105vh) rotate(-5deg); }
         }
         @keyframes float-left {
-          from { transform: translateX(110vw) rotate(10deg); }
-          to { transform: translateX(-10vw) rotate(-10deg); }
+          from { transform: translateX(105vw) rotate(5deg); }
+          to { transform: translateX(-20vw) rotate(-5deg); }
         }
         @keyframes float-right {
-          from { transform: translateX(-10vw) rotate(-10deg); }
-          to { transform: translateX(110vw) rotate(10deg); }
+          from { transform: translateX(-20vw) rotate(-5deg); }
+          to { transform: translateX(105vw) rotate(5deg); }
         }
         @keyframes float-diag {
           from { transform: translate(-10vw, -10vh) rotate(0deg); }
-          to { transform: translate(110vw, 110vh) rotate(15deg); }
+          to { transform: translate(100vw, 100vh) rotate(10deg); }
         }
 
         .floating-rule {
           position: absolute;
           white-space: nowrap;
           font-family: 'IBM Plex Mono', monospace;
-          font-size: 14px;
-          font-weight: bold;
-          letter-spacing: 0.1em;
+          font-size: 16px;
+          font-weight: 800;
+          letter-spacing: 0.05em;
           color: var(--text);
+          text-shadow: 0 0 10px rgba(255,255,255,0.1);
         }
       `}</style>
       
