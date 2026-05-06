@@ -16,6 +16,7 @@ import io
 import csv
 import bcrypt
 import jwt
+import asyncio
 from datetime import datetime, timezone, timedelta
 from typing import Optional
 from zoneinfo import ZoneInfo
@@ -661,7 +662,6 @@ async def create_post(body: PostIn, user: dict = Depends(require_active)):
         "comment_count": 0,
         "is_champion": False,
         "created_at": created,
-        "expireAt": created + timedelta(hours=24),
     }
     await db.posts.insert_one(doc)
     return serialize_post(doc, user)
@@ -1346,6 +1346,43 @@ async def _migrate_ttl_fields():
         logger.warning(f"TTL migration: {e}")
 
 
+async def daily_post_cleanup_loop():
+    """Delete non-pillar posts for the previous date at midnight America/Chicago every day.
+    Runs as a background task.
+    """
+    while True:
+        try:
+            # compute next midnight in local TZ
+            dk = today_key()
+            today_start = day_start_local(dk)
+            next_midnight = today_start + timedelta(days=1)
+            # convert to UTC for sleep calculation
+            next_midnight_utc = next_midnight.astimezone(timezone.utc)
+            now_utc_dt = now_utc()
+            delay = (next_midnight_utc - now_utc_dt).total_seconds()
+            if delay > 0:
+                logger.info(f"Daily cleanup sleeping for {int(delay)}s until {next_midnight_utc.isoformat()}")
+                await asyncio.sleep(delay)
+            # At midnight CT now: delete yesterday's posts that are NOT pillar/champion or boosted >= threshold
+            yesterday = (next_midnight - timedelta(days=1)).strftime("%Y-%m-%d")
+            # delete posts where date_key == yesterday and not pillar/champion and boost_likes < PILLAR_THRESHOLD
+            q = {
+                "date_key": yesterday,
+                "is_pillar": {"$ne": True},
+                "is_champion": {"$ne": True},
+                "$or": [
+                    {"boost_likes": {"$exists": False}},
+                    {"boost_likes": {"$lt": PILLAR_THRESHOLD}},
+                ],
+            }
+            res = await db.posts.delete_many(q)
+            logger.info(f"Daily cleanup: deleted {res.deleted_count} posts for date_key={yesterday}")
+        except Exception as e:
+            logger.error(f"Error in daily_post_cleanup_loop: {e}")
+            # wait a minute before retrying to avoid tight loop
+            await asyncio.sleep(60)
+
+
 @app.on_event("startup")
 async def startup():
     # Run migrations only when explicitly enabled to avoid accidental production changes
@@ -1379,6 +1416,13 @@ async def startup():
     # Backfill existing documents with proper Date types and expireAt (only when enabled)
     if os.environ.get("RUN_MIGRATIONS", "false").lower() == "true":
         await _migrate_ttl_fields()
+
+    # Start daily cleanup loop to delete non-pillar posts at midnight CT
+    try:
+        asyncio.create_task(daily_post_cleanup_loop())
+        logger.info("Daily post cleanup loop started")
+    except Exception as e:
+        logger.warning(f"Failed to start daily cleanup loop: {e}")
 
     pw = os.environ.get("ADMIN_PASSWORD", "admin123")
     existing = await db.users.find_one({"email": ADMIN_EMAIL})

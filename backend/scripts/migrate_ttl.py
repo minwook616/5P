@@ -6,6 +6,7 @@ Usage: python backend/scripts/migrate_ttl.py
 """
 import os
 import asyncio
+import sys
 from pathlib import Path
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
@@ -85,12 +86,17 @@ async def migrate_messages():
             i += 1
     print(f"Admin messages updated: {i}")
 
-async def main():
+async def main(auto_yes: bool = False):
     print("WARNING: Backup your database before running this script.")
+    if auto_yes:
+        print("Auto-confirm enabled: proceeding without prompts.")
     await migrate_posts()
     await migrate_messages()
     print("Migration finished.")
     client.close()
 
 if __name__ == '__main__':
-    asyncio.run(main())
+    auto = False
+    if '--yes' in sys.argv or '-y' in sys.argv:
+        auto = True
+    asyncio.run(main(auto_yes=auto))
