@@ -26,7 +26,7 @@ from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 from pydantic import BaseModel, Field, EmailStr
 
-from email_service import send_otp, send_password_reset, send_admin_decision, send_key_granted
+from .email_service import send_otp, send_password_reset, send_admin_decision, send_key_granted
 
 from slowapi import Limiter
 from slowapi.util import get_remote_address
@@ -123,9 +123,12 @@ def create_refresh_token(uid: str) -> str:
 
 
 def set_auth_cookies(resp: Response, access: str, refresh: str):
-    resp.set_cookie("access_token", access, httponly=True, secure=True, samesite="none",
+    # In dev mode we avoid `secure=True` and use a more permissive samesite
+    secure_flag = not DEV_MODE
+    same_site = "none" if secure_flag else "lax"
+    resp.set_cookie("access_token", access, httponly=True, secure=secure_flag, samesite=same_site,
                     max_age=ACCESS_TOKEN_MINUTES * 60, path="/")
-    resp.set_cookie("refresh_token", refresh, httponly=True, secure=True, samesite="none",
+    resp.set_cookie("refresh_token", refresh, httponly=True, secure=secure_flag, samesite=same_site,
                     max_age=REFRESH_TOKEN_DAYS * 86400, path="/")
 
 
@@ -243,6 +246,7 @@ class CommentIn(BaseModel):
 class MessageIn(BaseModel):
     recipient_id: str
     content: str = Field(min_length=1, max_length=2000)
+    post_id: Optional[str] = None 
 
 
 class AdminBoostIn(BaseModel):
@@ -345,8 +349,10 @@ async def register_isu(request: Request, body: RegisterIsuIn, response: Response
     await db.users.insert_one(doc)
     await _issue_otp(uid, email)
 
-    set_auth_cookies(response, create_access_token(uid, email), create_refresh_token(uid))
-    return {"user": public_user(doc)}
+    access = create_access_token(uid, email)
+    refresh = create_refresh_token(uid)
+    set_auth_cookies(response, access, refresh)
+    return {"user": public_user(doc), "access_token": access, "refresh_token": refresh}
 
 
 @api.post("/auth/register/invite")
@@ -372,8 +378,10 @@ async def register_invite(request: Request, body: RegisterInviteIn, response: Re
     await db.users.insert_one(doc)
     await _log_invite(doc, recommender, gate="invite")
 
-    set_auth_cookies(response, create_access_token(uid, email), create_refresh_token(uid))
-    return {"user": public_user(doc)}
+    access = create_access_token(uid, email)
+    refresh = create_refresh_token(uid)
+    set_auth_cookies(response, access, refresh)
+    return {"user": public_user(doc), "access_token": access, "refresh_token": refresh}
 
 
 @api.post("/auth/verify-otp")
@@ -434,8 +442,10 @@ async def login(request: Request, body: LoginIn, response: Response):
         raise HTTPException(401, "이메일 또는 비밀번호가 올바르지 않습니다.")
     if u.get("status") == "banned":
         raise HTTPException(403, "차단된 계정입니다.")
-    set_auth_cookies(response, create_access_token(u["id"], u["email"]), create_refresh_token(u["id"]))
-    return {"user": public_user(u)}
+    access = create_access_token(u["id"], u["email"])
+    refresh = create_refresh_token(u["id"])
+    set_auth_cookies(response, access, refresh)
+    return {"user": public_user(u), "access_token": access, "refresh_token": refresh}
 
 
 @api.post("/auth/logout")
@@ -635,6 +645,7 @@ async def create_post(body: PostIn, user: dict = Depends(require_active)):
         raise HTTPException(423, msg)
     dk = today_key()
     server_count = await server_post_count_today(dk)
+    created = now_utc()
     doc = {
         "id": str(uuid.uuid4()),
         "title": body.title.strip(),
@@ -649,7 +660,8 @@ async def create_post(body: PostIn, user: dict = Depends(require_active)):
         "reports": [],
         "comment_count": 0,
         "is_champion": False,
-        "created_at": now_utc().isoformat(),
+        "created_at": created,
+        "expireAt": created + timedelta(hours=24),
     }
     await db.posts.insert_one(doc)
     return serialize_post(doc, user)
@@ -805,8 +817,12 @@ async def delete_comment(cid: str, user: dict = Depends(require_active)):
 
 
 # ---------------- DM (Anonymous) ----------------
-def conv_id_for(a: str, b: str) -> str:
-    return "__".join(sorted([a, b]))
+def conv_id_for(a: str, b: str, post_id: str = None) -> str:
+    ids = sorted([a, b])
+    base = "__".join(ids)
+    if post_id:
+        return f"{base}__{post_id}" 
+    return base
 
 
 async def get_admin_user() -> Optional[dict]:
@@ -819,7 +835,7 @@ async def list_conversations(user: dict = Depends(require_active)):
         {"$or": [{"sender_id": user["id"]}, {"recipient_id": user["id"]}]}, {"_id": 0}
     ).sort("created_at", -1)
     msgs = await cursor.to_list(2000)
-    cutoff = (now_utc() - timedelta(hours=24)).isoformat()
+    cutoff = (now_utc() - timedelta(hours=24))
     await db.messages.delete_many({"admin_line": True, "created_at": {"$lt": cutoff}})
     seen = {}
     for m in msgs:
@@ -866,14 +882,14 @@ async def get_thread(conv_id: str, user: dict = Depends(require_active)):
     is_admin_line = conv_id.endswith("::admin_line")
     base_cid = conv_id.replace("::admin_line", "")
     parts = base_cid.split("__")
-    if len(parts) != 2 or user["id"] not in parts:
+    if len(parts) < 2 or user["id"] not in parts[:2]:
         raise HTTPException(403, "접근 권한이 없습니다.")
     other_id = parts[0] if parts[1] == user["id"] else parts[1]
     if is_admin_line:
         s = await compute_status(user)
         if not (s.get("is_pillar") or s.get("is_champion") or user.get("is_admin")):
             raise HTTPException(403, "운영자 비밀 통로 사용 권한이 없습니다.")
-        cutoff = (now_utc() - timedelta(hours=24)).isoformat()
+        cutoff = (now_utc() - timedelta(hours=24))
         await db.messages.delete_many({"conv_id": conv_id, "created_at": {"$lt": cutoff}})
     cursor = db.messages.find({"conv_id": conv_id}, {"_id": 0}).sort("created_at", 1)
     msgs = await cursor.to_list(1000)
@@ -893,6 +909,8 @@ async def get_thread(conv_id: str, user: dict = Depends(require_active)):
 
 @api.post("/messages")
 async def send_message(body: MessageIn, user: dict = Depends(require_active)):
+    admin_line = False
+    cid = conv_id_for(user["id"], body.recipient_id, body.post_id)
     if body.recipient_id == user["id"]:
         raise HTTPException(400, "자신에게 쪽지를 보낼 수 없습니다.")
     other = await db.users.find_one({"id": body.recipient_id}, {"_id": 0})
@@ -906,16 +924,20 @@ async def send_message(body: MessageIn, user: dict = Depends(require_active)):
         if s_user.get("is_pillar") or s_other.get("is_pillar") or s_user.get("is_champion") or s_other.get("is_champion"):
             admin_line = True
             cid = cid + "::admin_line"
+    created = now_utc()
     doc = {
         "id": str(uuid.uuid4()),
         "conv_id": cid,
+        "post_id": body.post_id, 
         "sender_id": user["id"],
         "recipient_id": body.recipient_id,
         "content": body.content.strip(),
         "read": False,
         "admin_line": admin_line,
-        "created_at": now_utc().isoformat(),
+        "created_at": created,
     }
+    if admin_line:
+        doc["expireAt"] = created + timedelta(hours=24)
     await db.messages.insert_one(doc)
     return {"id": doc["id"], "content": doc["content"], "from_me": True, "created_at": doc["created_at"], "conv_id": cid}
 
@@ -927,7 +949,8 @@ async def start_dm_from_post(post_id: str, user: dict = Depends(require_active))
         raise HTTPException(404, "게시글을 찾을 수 없습니다.")
     if p["author_id"] == user["id"]:
         raise HTTPException(400, "자신의 글에는 쪽지를 보낼 수 없습니다.")
-    return {"recipient_id": p["author_id"], "conv_id": conv_id_for(user["id"], p["author_id"])}
+    new_cid = conv_id_for(user["id"], p["author_id"], post_id)
+    return {"recipient_id": p["author_id"], "conv_id": new_cid}
 
 
 # ---------------- Recommendation Keys (user-facing) ----------------
@@ -1272,6 +1295,57 @@ async def _migrate_pillar_rename():
         logger.warning(f"Pillar migration: {e}")
 
 
+async def _migrate_ttl_fields():
+    """Backfill `created_at` as BSON datetimes and add `expireAt` (24h) for posts and admin-line messages.
+    This helps enable MongoDB TTL indexes which operate on Date fields.
+    """
+    try:
+        # Posts: convert ISO string created_at to datetime and set expireAt
+        async for p in db.posts.find({}, {"_id": 1, "created_at": 1}):
+            ca = p.get("created_at")
+            need_update = False
+            updates = {}
+            if isinstance(ca, str):
+                try:
+                    dt = datetime.fromisoformat(ca)
+                    updates["created_at"] = dt
+                    need_update = True
+                except Exception:
+                    # skip parsing failures
+                    continue
+            else:
+                dt = ca
+            if dt and p.get("expireAt") is None:
+                updates["expireAt"] = dt + timedelta(hours=24)
+                need_update = True
+            if need_update:
+                await db.posts.update_one({"_id": p["_id"]}, {"$set": updates})
+
+        # Messages (admin_line only): convert created_at and set expireAt
+        async for m in db.messages.find({"admin_line": True}, {"_id": 1, "created_at": 1}):
+            ca = m.get("created_at")
+            need_update = False
+            updates = {}
+            if isinstance(ca, str):
+                try:
+                    dt = datetime.fromisoformat(ca)
+                    updates["created_at"] = dt
+                    need_update = True
+                except Exception:
+                    continue
+            else:
+                dt = ca
+            if dt and m.get("expireAt") is None:
+                updates["expireAt"] = dt + timedelta(hours=24)
+                need_update = True
+            if need_update:
+                await db.messages.update_one({"_id": m["_id"]}, {"$set": updates})
+
+        logger.info("TTL migration/backfill completed")
+    except Exception as e:
+        logger.warning(f"TTL migration: {e}")
+
+
 @app.on_event("startup")
 async def startup():
     await _migrate_pillar_rename()
@@ -1291,6 +1365,17 @@ async def startup():
     await db.password_resets.create_index("token", unique=True)
     await db.invite_logs.create_index("recommender_id")
     await db.invite_logs.create_index("invited_user_id")
+
+    # TTL indices: expire posts and admin_line messages after their expireAt
+    try:
+        await db.posts.create_index("expireAt", expireAfterSeconds=0)
+        await db.messages.create_index("expireAt", expireAfterSeconds=0)
+        logger.info("TTL indices ensured for posts and messages")
+    except Exception as e:
+        logger.warning(f"Creating TTL indices failed: {e}")
+
+    # Backfill existing documents with proper Date types and expireAt
+    await _migrate_ttl_fields()
 
     pw = os.environ.get("ADMIN_PASSWORD", "admin123")
     existing = await db.users.find_one({"email": ADMIN_EMAIL})
@@ -1337,9 +1422,16 @@ async def root():
 
 app.include_router(api)
 
+origins = [
+    "https://ia5p.com",
+    "https://www.ia5p.com",
+    "http://localhost:3000", # 로컬 테스트용
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    # 2. ["*"] 대신 위에서 만든 origins 목록을 넣습니다.
+    allow_origins=origins, 
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
