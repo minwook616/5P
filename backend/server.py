@@ -699,9 +699,10 @@ async def create_post(body: PostIn, user: dict = Depends(require_active)):
 
 @api.get("/posts")
 async def list_posts(date_key: Optional[str] = None, user: dict = Depends(require_active)):
-    q = {}
-    if date_key:
-        q["date_key"] = date_key
+    if not date_key:
+        date_key = today_key()
+        
+    q = {"date_key": date_key}
     cursor = db.posts.find(q, {"_id": 0}).sort("created_at", -1).limit(200)
     items = await cursor.to_list(200)
     return [serialize_post(p, user) for p in items]
@@ -939,21 +940,24 @@ async def get_thread(conv_id: str, user: dict = Depends(require_active)):
 
 @api.post("/messages")
 async def send_message(body: MessageIn, user: dict = Depends(require_active)):
-    admin_line = False
-    cid = conv_id_for(user["id"], body.recipient_id, body.post_id)
     if body.recipient_id == user["id"]:
         raise HTTPException(400, "자신에게 쪽지를 보낼 수 없습니다.")
+    
     other = await db.users.find_one({"id": body.recipient_id}, {"_id": 0})
     if not other:
         raise HTTPException(404, "수신자를 찾을 수 없습니다.")
+        
     admin_line = False
-    cid = conv_id_for(user["id"], body.recipient_id)
+    
+    cid = conv_id_for(user["id"], body.recipient_id, body.post_id)
+    
     if other.get("is_admin", False) or user.get("is_admin", False):
         s_user = await compute_status(user)
         s_other = await compute_status(other)
         if s_user.get("is_pillar") or s_other.get("is_pillar") or s_user.get("is_champion") or s_other.get("is_champion"):
             admin_line = True
             cid = cid + "::admin_line"
+            
     created = now_utc()
     doc = {
         "id": str(uuid.uuid4()),
@@ -966,8 +970,10 @@ async def send_message(body: MessageIn, user: dict = Depends(require_active)):
         "admin_line": admin_line,
         "created_at": created,
     }
+    
     if admin_line:
         doc["expireAt"] = created + timedelta(hours=24)
+        
     await db.messages.insert_one(doc)
     return {"id": doc["id"], "content": doc["content"], "from_me": True, "created_at": doc["created_at"], "conv_id": cid}
 
