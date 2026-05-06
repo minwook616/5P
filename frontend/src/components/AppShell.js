@@ -57,6 +57,32 @@ export default function AppShell() {
               5 Stories,<br/>5 People,<br/>Once a day.
             </div>
           </div>
+
+          <div className="pt-10 space-y-6">
+            <div className="text-[10px] uppercase tracking-[0.3em] text-[var(--text-mute)] fp-mono">Principles</div>
+            <div className="space-y-4 text-[13px] font-bold leading-snug tracking-tight">
+              <div>
+                <span className="text-[var(--red)] block mb-1">01. 전체 제한</span>
+                <span className="text-[var(--text)]">하루 딱 5개의 글만 허용됩니다.</span>
+              </div>
+              <div>
+                <span className="text-[var(--red)] block mb-1">02. 개별 제한</span>
+                <span className="text-[var(--text)]">한 명당 하루에 1개의 글만 작성 가능합니다.</span>
+              </div>
+              <div>
+                <span className="text-[var(--red)] block mb-1">03. 초기화</span>
+                <span className="text-[var(--text)]">매일 오전 12시(자정)에 모든 권한이 리셋됩니다.</span>
+              </div>
+              <div>
+                <span className="text-[var(--red)] block mb-1">04. 자동 삭제</span>
+                <span className="text-[var(--text)]">모든 기록은 24시간 뒤 흔적 없이 사라집니다.</span>
+              </div>
+              <div>
+                <span className="text-[var(--red)] block mb-1">05. 클린 커뮤니티</span>
+                <span className="text-[var(--text)]">욕설 및 광고는 운영진에 의해 즉시 삭제됩니다.</span>
+              </div>
+            </div>
+          </div>
         </aside>
 
         <main className="md:col-span-9 fp-fade">
