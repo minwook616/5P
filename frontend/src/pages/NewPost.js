@@ -61,14 +61,25 @@ export default function NewPost() {
         ← Back
       </button>
 
-      <div>
-        <div className="text-[13px] uppercase tracking-[0.4em] fp-mono text-[var(--text-mute)] mb-2">Compose</div>
-        <h1 className="font-bold text-3xl tracking-tighter">One shot<span className="text-[var(--red)]">.</span></h1>
-        {status && (
-          <div className="mt-2 text-xs fp-mono uppercase tracking-[0.25em] text-[var(--text-mute)]" data-testid="compose-meta">
-            {status.is_admin ? `Admin · ${status.admin_daily_limit}/day` : "1 post per day"}
-            {" · "}
-            Slot {Math.min(status.server_limit, status.server_used + 1)}/{status.server_limit}
+      <div className="flex justify-between items-start">
+        <div>
+          <div className="text-[13px] uppercase tracking-[0.4em] fp-mono text-[var(--text-mute)] mb-2">Compose</div>
+          <h1 className="font-bold text-3xl tracking-tighter">One shot<span className="text-[var(--red)]">.</span></h1>
+          {status && (
+            <div className="mt-2 text-xs fp-mono uppercase tracking-[0.25em] text-[var(--text-mute)]" data-testid="compose-meta">
+              {status.is_admin ? `Admin · ${status.admin_daily_limit}/day` : "1 post per day"}
+              {" · "}
+              Slot {Math.min(status.server_limit, status.server_used + 1)}/{status.server_limit}
+            </div>
+          )}
+        </div>
+
+        {status?.keyword && (
+          <div className="text-right">
+            <div className="text-[10px] uppercase tracking-[0.3em] fp-mono text-[var(--text-mute)] mb-2">Daily Keyword</div>
+            <div className="text-[14px] uppercase tracking-[0.2em] fp-mono text-[var(--red)] font-black border border-[var(--red)]/30 px-3 py-1 bg-[var(--red)]/5 rounded-full animate-pulse inline-block">
+              {status.keyword}
+            </div>
           </div>
         )}
       </div>
