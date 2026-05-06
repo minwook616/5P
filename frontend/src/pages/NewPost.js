@@ -8,6 +8,8 @@ export default function NewPost() {
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
   const [location, setLocation] = useState("");
+  const [customLocation, setCustomLocation] = useState("");
+  const [showCustom, setShowCustom] = useState(false);
   const [status, setStatus] = useState(null);
   const [submitting, setSubmitting] = useState(false);
 
@@ -16,12 +18,23 @@ export default function NewPost() {
     "Campanile 종소리가 들리는 곳",
     "어느 기숙사 방 안",
     "CyRide 버스 안",
-    "랩실 구석"
+    "랩실 구석",
+    "직접 입력..."
   ];
 
   useEffect(() => {
     api.get("/status/today").then((r) => setStatus(r.data)).catch(() => {});
   }, []);
+
+  const handleLocationChange = (val) => {
+    if (val === "직접 입력...") {
+      setShowCustom(true);
+      setLocation("");
+    } else {
+      setShowCustom(false);
+      setLocation(val);
+    }
+  };
 
   const submit = async (e) => {
     e.preventDefault();
@@ -31,7 +44,8 @@ export default function NewPost() {
     }
     setSubmitting(true);
     try {
-      const { data } = await api.post("/posts", { title, content, location });
+      const finalLoc = showCustom ? customLocation.trim() : location;
+      const { data } = await api.post("/posts", { title, content, location: finalLoc });
       toast.success("작성되었습니다.");
       navigate(`/post/${data.id}`);
     } catch (err) {
@@ -75,17 +89,30 @@ export default function NewPost() {
 
         <div>
           <label className="block text-[13px] uppercase tracking-[0.3em] fp-mono text-[var(--text-mute)] mb-2">Location</label>
-          <select 
-            className="fp-input"
-            value={location}
-            onChange={(e) => setLocation(e.target.value)}
-            data-testid="location-select"
-          >
-            <option value="">(어디쯤 계신가요?)</option>
-            {locations.map((loc) => (
-              <option key={loc} value={loc}>{loc}</option>
-            ))}
-          </select>
+          <div className="space-y-3">
+            <select 
+              className="fp-input bg-[#1A1A1A] text-[var(--text)] border-[var(--line-strong)]"
+              value={showCustom ? "직접 입력..." : location}
+              onChange={(e) => handleLocationChange(e.target.value)}
+              data-testid="location-select"
+            >
+              <option value="" className="bg-[#1A1A1A] text-[var(--text)]">(어디쯤 계신가요?)</option>
+              {locations.map((loc) => (
+                <option key={loc} value={loc} className="bg-[#1A1A1A] text-[var(--text)]">{loc}</option>
+              ))}
+            </select>
+
+            {showCustom && (
+              <input
+                className="fp-input animate-in fade-in slide-in-from-top-1 duration-200"
+                placeholder="장소를 직접 입력해주세요 (예: 호수 앞 벤치)"
+                value={customLocation}
+                onChange={(e) => setCustomLocation(e.target.value)}
+                maxLength={30}
+                required
+              />
+            )}
+          </div>
         </div>
 
         <div>
