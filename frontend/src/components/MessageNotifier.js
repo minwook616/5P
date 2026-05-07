@@ -15,9 +15,12 @@ export default function MessageNotifier() {
     const unlockAudio = () => {
       console.log("Attempting to initialize and unlock audio...");
       
-      // Create fresh audio object if it doesn't exist
+      const audioPath = `${window.location.origin}/ding.mp3`;
+      console.log("Using audio path:", audioPath);
+
+      // Create fresh audio object
       if (!audioRef.current) {
-        audioRef.current = new Audio("/ding.mp3");
+        audioRef.current = new Audio(audioPath);
       }
 
       audioRef.current.play()
@@ -31,7 +34,7 @@ export default function MessageNotifier() {
         })
         .catch(e => {
           console.warn("Audio unlock failed, will retry on next interaction:", e);
-          // If it fails with "No supported sources", try re-initializing
+          // Fallback: try different path if it fails
           audioRef.current = new Audio("/ding.mp3");
         });
     };
