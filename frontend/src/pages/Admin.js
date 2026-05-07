@@ -319,12 +319,26 @@ export default function Admin() {
               <div className="text-[10px] uppercase tracking-[0.3em] text-[var(--text-mute)] fp-mono mb-2">Daily Keyword</div>
               <div className="text-2xl font-bold tracking-tight">{status?.keyword || "None"}</div>
             </div>
-            <div className="pt-4 border-t border-[var(--line)]">
-              <label className="block text-[11px] uppercase tracking-[0.2em] fp-mono text-[var(--text-mute)] mb-2">Change Keyword</label>
-              <div className="flex gap-2">
-                <input value={newKeyword} onChange={(e) => setNewKeyword(e.target.value)} placeholder="Enter new keyword" className="fp-input" />
-                <button onClick={updateKeyword} className="fp-btn fp-btn-red">Update</button>
+            <div className="pt-4 border-t border-[var(--line)] space-y-4">
+              <div>
+                <label className="block text-[11px] uppercase tracking-[0.2em] fp-mono text-[var(--text-mute)] mb-2">Target Date</label>
+                <input
+                  type="date"
+                  value={selectedDate}
+                  onChange={(e) => setSelectedDate(e.target.value)}
+                  className="fp-input"
+                />
               </div>
+              <div>
+                <label className="block text-[11px] uppercase tracking-[0.2em] fp-mono text-[var(--text-mute)] mb-2">Change Keyword</label>
+                <div className="flex gap-2">
+                  <input value={newKeyword} onChange={(e) => setNewKeyword(e.target.value)} placeholder="Enter new keyword" className="fp-input" />
+                  <button onClick={updateKeyword} className="fp-btn fp-btn-red">Update</button>
+                </div>
+              </div>
+              <p className="mt-2 text-[10px] text-[var(--text-mute)] leading-relaxed">
+                You can set keywords for future dates. If a date is not set, a random campus-themed keyword will be used.
+              </p>
             </div>
           </div>
           <div className="p-6 border border-[var(--line-strong)] bg-zinc-900/20 rounded-xl">
