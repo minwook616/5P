@@ -13,17 +13,20 @@ export default function MessageNotifier() {
   // Unlock audio on first user interaction to bypass browser autoplay restrictions
   useEffect(() => {
     const unlockAudio = () => {
+      console.log("Attempting to unlock audio...");
       if (audioRef.current) {
         audioRef.current.play()
           .then(() => {
             // Immediately pause and reset after success
             audioRef.current.pause();
             audioRef.current.currentTime = 0;
-            console.log("Audio unlocked");
+            console.log("Audio unlocked successfully");
             document.removeEventListener("click", unlockAudio);
             document.removeEventListener("touchstart", unlockAudio);
           })
-          .catch(e => console.log("Audio unlock wait:", e));
+          .catch(e => {
+            console.warn("Audio unlock failed, will retry on next interaction:", e);
+          });
       }
     };
 
@@ -43,9 +46,21 @@ export default function MessageNotifier() {
         const res = await api.get("/messages/unread-count");
         const newCount = res.data.count;
 
+        console.log(`Checking unread: prev=${unreadCount}, new=${newCount}`);
+
         if (newCount > unreadCount) {
+          console.log("New message detected! Attempting to play sound...");
           // Play sound
-          audioRef.current.play().catch(e => console.error("Audio play failed:", e));
+          if (audioRef.current) {
+            audioRef.current.currentTime = 0;
+            audioRef.current.play()
+              .then(() => console.log("Sound played successfully"))
+              .catch(e => {
+                console.error("Audio play failed after detection:", e);
+                // Fallback: try re-loading if it failed
+                audioRef.current.load();
+              });
+          }
           
           // Show toast
           toast("새로운 쪽지가 도착했습니다", {
