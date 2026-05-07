@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import api from "@/lib/api";
+import api, { formatApiError } from "@/lib/api";
 import { toast } from "sonner";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
@@ -8,35 +8,23 @@ export default function MessageNotifier() {
   const { user } = useAuth();
   const [unreadCount, setUnreadCount] = useState(0);
   const navigate = useNavigate();
-  const audioRef = useRef(null);
+  const audioRef = useRef(new Audio("/ding.mp3"));
 
-  // Initialize and unlock audio on first user interaction
+  // Unlock audio on first user interaction
   useEffect(() => {
     const unlockAudio = () => {
-      console.log("Attempting to initialize and unlock audio...");
-      
-      const audioPath = `${window.location.origin}/ding.mp3`;
-      console.log("Using audio path:", audioPath);
-
-      // Create fresh audio object
-      if (!audioRef.current) {
-        audioRef.current = new Audio(audioPath);
+      console.log("Interaction detected. Attempting to unlock audio...");
+      if (audioRef.current) {
+        audioRef.current.play()
+          .then(() => {
+            audioRef.current.pause();
+            audioRef.current.currentTime = 0;
+            console.log("Audio context unlocked.");
+            document.removeEventListener("click", unlockAudio);
+            document.removeEventListener("touchstart", unlockAudio);
+          })
+          .catch(e => console.warn("Audio unlock pending interaction:", e));
       }
-
-      audioRef.current.play()
-        .then(() => {
-          // Immediately pause and reset after success
-          audioRef.current.pause();
-          audioRef.current.currentTime = 0;
-          console.log("Audio unlocked successfully");
-          document.removeEventListener("click", unlockAudio);
-          document.removeEventListener("touchstart", unlockAudio);
-        })
-        .catch(e => {
-          console.warn("Audio unlock failed, will retry on next interaction:", e);
-          // Fallback: try different path if it fails
-          audioRef.current = new Audio("/ding.mp3");
-        });
     };
 
     document.addEventListener("click", unlockAudio);
@@ -55,23 +43,17 @@ export default function MessageNotifier() {
         const res = await api.get("/messages/unread-count");
         const newCount = res.data.count;
 
-        console.log(`Checking unread: prev=${unreadCount}, new=${newCount}`);
+        console.log(`Unread poll: prev=${unreadCount}, new=${newCount}`);
 
         if (newCount > unreadCount) {
-          console.log("New message detected! Attempting to play sound...");
-          // Play sound
+          console.log("New message! Playing sound...");
           if (audioRef.current) {
             audioRef.current.currentTime = 0;
             audioRef.current.play()
-              .then(() => console.log("Sound played successfully"))
-              .catch(e => {
-                console.error("Audio play failed after detection:", e);
-                // Fallback: try re-loading if it failed
-                audioRef.current.load();
-              });
+              .then(() => console.log("Playback success"))
+              .catch(e => console.error("Playback failed:", e));
           }
           
-          // Show toast
           toast("새로운 쪽지가 도착했습니다", {
             description: "쪽지함에서 확인하세요.",
             action: {
@@ -82,16 +64,19 @@ export default function MessageNotifier() {
         }
         setUnreadCount(newCount);
       } catch (err) {
-        console.error("Unread count check failed:", err);
+        const detail = err.response?.data?.detail || err.message;
+        console.error(`Unread poll failed (Status ${err.response?.status}):`, detail);
+        
+        if (err.response?.status === 403) {
+          console.log("Current user object from context:", user);
+        }
       }
     };
 
-    // Initial check
     checkUnread();
-
-    const interval = setInterval(checkUnread, 10000); // 10s
+    const interval = setInterval(checkUnread, 15000);
     return () => clearInterval(interval);
   }, [user, unreadCount, navigate]);
 
-  return null; // Background only
+  return null;
 }
