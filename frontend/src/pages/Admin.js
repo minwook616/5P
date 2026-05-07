@@ -11,6 +11,7 @@ export default function Admin() {
   const [users, setUsers] = useState([]);
   const [status, setStatus] = useState(null);
   const [newKeyword, setNewKeyword] = useState("");
+  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split("T")[0]);
   const [userSearch, setUserSearch] = useState("");
   const [filterStatus, setFilterStatus] = useState("");
   const [filterGate, setFilterGate] = useState("");
@@ -141,8 +142,11 @@ export default function Admin() {
   const updateKeyword = async () => {
     if (!newKeyword.trim()) return;
     try {
-      await api.post("/admin/daily-keyword", { keyword: newKeyword.trim() });
-      toast.success("Keyword updated");
+      await api.post("/admin/daily-keyword", { 
+        keyword: newKeyword.trim(),
+        date_key: selectedDate 
+      });
+      toast.success(`Keyword for ${selectedDate} updated`);
       load();
     } catch (err) {
       toast.error(formatApiError(err.response?.data?.detail));
@@ -314,7 +318,7 @@ export default function Admin() {
         </div>
       ) : tab === "system" ? (
         <div className="max-w-md space-y-8">
-          <div className="p-6 border border-[var(--line-strong)] bg-zinc-900/20 rounded-xl space-y-4">
+          <div className="p-6 border border-[var(--line-strong)] bg-zinc-900/20 rounded-xl space-y-4 text-[var(--text)]">
             <div>
               <div className="text-[10px] uppercase tracking-[0.3em] text-[var(--text-mute)] fp-mono mb-2">Daily Keyword</div>
               <div className="text-2xl font-bold tracking-tight">{status?.keyword || "None"}</div>
@@ -326,14 +330,14 @@ export default function Admin() {
                   type="date"
                   value={selectedDate}
                   onChange={(e) => setSelectedDate(e.target.value)}
-                  className="fp-input"
+                  className="fp-input w-full bg-[#1A1A1A] text-[var(--text)]"
                 />
               </div>
               <div>
                 <label className="block text-[11px] uppercase tracking-[0.2em] fp-mono text-[var(--text-mute)] mb-2">Change Keyword</label>
                 <div className="flex gap-2">
-                  <input value={newKeyword} onChange={(e) => setNewKeyword(e.target.value)} placeholder="Enter new keyword" className="fp-input" />
-                  <button onClick={updateKeyword} className="fp-btn fp-btn-red">Update</button>
+                  <input value={newKeyword} onChange={(e) => setNewKeyword(e.target.value)} placeholder="Enter new keyword" className="fp-input flex-1" />
+                  <button onClick={updateKeyword} className="fp-btn fp-btn-red whitespace-nowrap">Update</button>
                 </div>
               </div>
               <p className="mt-2 text-[10px] text-[var(--text-mute)] leading-relaxed">
@@ -341,7 +345,7 @@ export default function Admin() {
               </p>
             </div>
           </div>
-          <div className="p-6 border border-[var(--line-strong)] bg-zinc-900/20 rounded-xl">
+          <div className="p-6 border border-[var(--line-strong)] bg-zinc-900/20 rounded-xl text-[var(--text)]">
             <div className="text-[10px] uppercase tracking-[0.3em] text-[var(--text-mute)] fp-mono mb-2">System Info</div>
             <div className="text-sm fp-mono">Date: {status?.today_key} | Posts: {status?.server_used}/{status?.server_limit}</div>
           </div>
@@ -351,7 +355,7 @@ export default function Admin() {
       {detail && (
         <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-6" onClick={() => setDetail(null)}>
           <div className="bg-[var(--bg)] border border-[var(--line-strong)] max-w-lg w-full p-8 space-y-6" onClick={(e) => e.stopPropagation()}>
-            <div className="text-2xl font-bold break-all">{detail.user.email}</div>
+            <div className="text-2xl font-bold break-all text-[var(--text)]">{detail.user.email}</div>
             <div className="flex gap-2 pt-2 flex-wrap">
               {detail.user.status === "pending_review" && (
                 <>
