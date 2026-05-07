@@ -44,7 +44,8 @@ export default function AppShell() {
       </header>
 
       <div className="max-w-5xl mx-auto px-6 py-8 flex flex-col md:grid md:grid-cols-12 gap-10">
-        <aside className="md:col-span-3 space-y-1 order-1">
+        {/* Sidebar: Top on mobile, Left on desktop */}
+        <aside className="md:col-span-3 space-y-1">
           {link("/feed", "Feed", "nav-feed")}
           {link("/pillars", "★ The Pillars", "nav-pillars")}
           {link("/post/new", "Compose", "nav-new")}
@@ -59,7 +60,7 @@ export default function AppShell() {
             </div>
           </div>
 
-          {/* Principles in sidebar for Desktop */}
+          {/* Principles in sidebar for Desktop only */}
           <div className="hidden md:block pt-10 space-y-6">
             <div className="text-[10px] uppercase tracking-[0.3em] text-[var(--text-mute)] fp-mono">Principles</div>
             <div className="space-y-4 text-[13px] font-bold leading-snug tracking-tight">
@@ -87,12 +88,13 @@ export default function AppShell() {
           </div>
         </aside>
 
-        <main className="md:col-span-9 fp-fade order-2">
+        {/* Content: Middle on mobile, Right on desktop */}
+        <main className="md:col-span-9 fp-fade">
           <Outlet />
         </main>
 
-        {/* Principles at the bottom for Mobile */}
-        <aside className="md:hidden order-3">
+        {/* Principles at the very bottom for Mobile only */}
+        <aside className="md:hidden">
           <div className="pt-10 pb-20 space-y-6">
             <div className="text-[10px] uppercase tracking-[0.3em] text-[var(--text-mute)] fp-mono">Principles</div>
             <div className="space-y-4 text-[13px] font-bold leading-snug tracking-tight">
@@ -118,12 +120,6 @@ export default function AppShell() {
               </div>
             </div>
           </div>
-        </aside>
-
-        {/* Hidden on mobile, visible on desktop sidebar */}
-        <aside className="hidden md:block md:absolute md:invisible">
-          {/* This is a structural trick to keep the desktop sidebar unified if needed, 
-              but since we already have the aside at the top, we just need to add Principles there for desktop */}
         </aside>
       </div>
     </div>
