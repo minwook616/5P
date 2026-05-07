@@ -9,6 +9,8 @@ export default function Admin() {
   const [logs, setLogs] = useState([]);
   const [board, setBoard] = useState([]);
   const [users, setUsers] = useState([]);
+  const [status, setStatus] = useState(null);
+  const [newKeyword, setNewKeyword] = useState("");
   const [userSearch, setUserSearch] = useState("");
   const [filterStatus, setFilterStatus] = useState("");
   const [filterGate, setFilterGate] = useState("");
@@ -20,16 +22,19 @@ export default function Admin() {
   const load = async () => {
     setLoading(true);
     try {
-      const [p, k, l, b] = await Promise.all([
+      const [p, k, l, b, s] = await Promise.all([
         api.get("/admin/pending"),
         api.get("/admin/keys"),
         api.get("/admin/invite-log"),
         api.get("/admin/leaderboard"),
+        api.get("/status/today"),
       ]);
       setPending(p.data);
       setKeys(k.data);
       setLogs(l.data);
       setBoard(b.data);
+      setStatus(s.data);
+      setNewKeyword(s.data.keyword || "");
       setSelected(new Set());
     } catch (err) {
       toast.error(formatApiError(err.response?.data?.detail));
@@ -87,7 +92,6 @@ export default function Admin() {
 
   const exportCsv = () => {
     const url = `${process.env.REACT_APP_BACKEND_URL}/api/admin/users/export.csv`;
-    // Open in new tab; cookies are sent automatically on same-site request
     window.open(url, "_blank");
   };
 
@@ -134,6 +138,17 @@ export default function Admin() {
     }
   };
 
+  const updateKeyword = async () => {
+    if (!newKeyword.trim()) return;
+    try {
+      await api.post("/admin/daily-keyword", { keyword: newKeyword.trim() });
+      toast.success("Keyword updated");
+      load();
+    } catch (err) {
+      toast.error(formatApiError(err.response?.data?.detail));
+    }
+  };
+
   const copy = (text) => {
     navigator.clipboard.writeText(text);
     toast.success("Copied");
@@ -174,6 +189,7 @@ export default function Admin() {
           ["keys", `Keys (${keys.length})`],
           ["logs", `Invite Log (${logs.length})`],
           ["board", `Leaderboard (${board.length})`],
+          ["system", "System"],
         ].map(([k, label]) => (
           <button
             key={k}
@@ -398,7 +414,7 @@ export default function Admin() {
             </div>
           ))}
         </div>
-      ) : (
+      ) : tab === "board" ? (
         <div data-testid="leaderboard-list">
           <div className="text-[13px] fp-mono uppercase tracking-[0.3em] text-[var(--text-mute)] mb-3">
             Top recommenders by approved invites
@@ -423,6 +439,49 @@ export default function Admin() {
               ))}
             </div>
           )}
+        </div>
+      ) : (
+        <div className="max-w-md space-y-8" data-testid="system-panel">
+          <div className="p-6 border border-[var(--line-strong)] bg-zinc-900/20 rounded-xl space-y-4">
+            <div>
+              <div className="text-[10px] uppercase tracking-[0.3em] text-[var(--text-mute)] fp-mono mb-2">Daily Keyword</div>
+              <div className="text-2xl font-bold tracking-tight">
+                {status?.keyword || "None"}
+              </div>
+            </div>
+            
+            <div className="pt-4 border-t border-[var(--line)]">
+              <label className="block text-[11px] uppercase tracking-[0.2em] fp-mono text-[var(--text-mute)] mb-2">Change Keyword</label>
+              <div className="flex gap-2">
+                <input
+                  value={newKeyword}
+                  onChange={(e) => setNewKeyword(e.target.value)}
+                  placeholder="Enter new keyword"
+                  className="fp-input"
+                />
+                <button onClick={updateKeyword} className="fp-btn fp-btn-red">Update</button>
+              </div>
+              <p className="mt-2 text-[10px] text-[var(--text-mute)] leading-relaxed">
+                Updating will immediately change the keyword for all users today.
+              </p>
+            </div>
+          </div>
+
+          <div className="p-6 border border-[var(--line-strong)] bg-zinc-900/20 rounded-xl space-y-4">
+            <div>
+              <div className="text-[10px] uppercase tracking-[0.3em] text-[var(--text-mute)] fp-mono mb-2">System Info</div>
+              <div className="text-sm space-y-1 fp-mono">
+                <div className="flex justify-between">
+                  <span className="text-[var(--text-mute)]">Date Key:</span>
+                  <span>{status?.today_key}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-[var(--text-mute)]">Posts:</span>
+                  <span>{status?.server_used} / {status?.server_limit}</span>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       )}
 
