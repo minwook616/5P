@@ -26,7 +26,7 @@ export default function InstallPrompt() {
   if (!show) return null;
 
   return (
-    <div className="fixed bottom-6 left-6 right-6 z-[100] animate-in fade-in slide-in-from-bottom-4 duration-500">
+    <div className="fixed bottom-6 left-6 right-6 z-[9999] animate-in fade-in slide-in-from-bottom-4 duration-500">
       <div className="bg-zinc-900 border border-zinc-800 p-5 rounded-2xl shadow-2xl relative overflow-hidden">
         {/* Subtle background glow */}
         <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-[var(--red)] to-transparent opacity-50" />
