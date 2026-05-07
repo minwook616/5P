@@ -912,6 +912,12 @@ async def get_admin_user() -> Optional[dict]:
     return await db.users.find_one({"is_admin": True}, {"_id": 0})
 
 
+@api.get("/messages/unread-count")
+async def get_unread_count(user: dict = Depends(require_active)):
+    count = await db.messages.count_documents({"recipient_id": user["id"], "read": False})
+    return {"count": count}
+
+
 @api.get("/messages/conversations")
 async def list_conversations(user: dict = Depends(require_active)):
     cursor = db.messages.find(
