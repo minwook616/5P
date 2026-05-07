@@ -275,6 +275,10 @@ class BanIn(BaseModel):
 class ReportIn(BaseModel):
     reason: str
 
+class KeywordUpdateIn(BaseModel):
+    date_key: str  # YYYY-MM-DD
+    keyword: str
+
 def email_allowed(email: str) -> bool:
     return email.lower().endswith(f"@{ALLOWED_DOMAIN}")
 
@@ -1390,6 +1394,34 @@ async def admin_boost(pid: str, body: AdminBoostIn, _: dict = Depends(require_ad
     await db.posts.update_one({"id": pid}, {"$set": {"boost_likes": int(body.boost)}})
     await maybe_promote_to_pillar(pid)
     return {"ok": True, "boost": int(body.boost)}
+
+
+@api.post("/admin/daily-keyword")
+async def admin_update_keyword(body: KeywordUpdateIn, _: dict = Depends(require_admin)):
+    """Update or pre-set the keyword for a specific date."""
+    date_key = body.date_key.strip()
+    keyword = body.keyword.strip()
+    
+    # Try to update existing state
+    res = await db.daily_state.update_one(
+        {"date_key": date_key},
+        {"$set": {"keyword": keyword}}
+    )
+    
+    # If it doesn't exist, create it (pre-set for future date)
+    if res.matched_count == 0:
+        # We need a full state object
+        start = day_start_local(date_key)
+        new_state = {
+            "date_key": date_key,
+            "unlock_at": start.astimezone(timezone.utc).isoformat(),
+            "pillar_id": None,
+            "keyword": keyword,
+            "created_at": now_utc().isoformat(),
+        }
+        await db.daily_state.insert_one(new_state)
+        
+    return {"ok": True, "date_key": date_key, "keyword": keyword}
 
 
 # ---------------- Startup ----------------
