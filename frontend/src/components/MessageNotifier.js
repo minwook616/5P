@@ -8,13 +8,18 @@ export default function MessageNotifier() {
   const { user } = useAuth();
   const [unreadCount, setUnreadCount] = useState(0);
   const navigate = useNavigate();
-  const audioRef = useRef(new Audio("/ding.mp3"));
+  const audioRef = useRef(null);
 
-  // Unlock audio on first user interaction
+  // Initialize and unlock audio on first user interaction
   useEffect(() => {
     const unlockAudio = () => {
-      console.log("Interaction detected. Attempting to unlock audio...");
-      if (audioRef.current) {
+      console.log("Interaction detected. Initializing audio...");
+      try {
+        if (!audioRef.current) {
+          audioRef.current = new Audio("/ding.mp3");
+          audioRef.current.load(); // Force load
+        }
+        
         audioRef.current.play()
           .then(() => {
             audioRef.current.pause();
@@ -23,7 +28,9 @@ export default function MessageNotifier() {
             document.removeEventListener("click", unlockAudio);
             document.removeEventListener("touchstart", unlockAudio);
           })
-          .catch(e => console.warn("Audio unlock pending interaction:", e));
+          .catch(e => console.warn("Audio play blocked by browser:", e));
+      } catch (err) {
+        console.error("Failed to initialize audio:", err);
       }
     };
 
@@ -36,22 +43,18 @@ export default function MessageNotifier() {
   }, []);
 
   useEffect(() => {
-    if (!user) return;
+    if (!user || user.status !== "active") return;
 
     const checkUnread = async () => {
       try {
         const res = await api.get("/messages/unread-count");
         const newCount = res.data.count;
 
-        console.log(`Unread poll: prev=${unreadCount}, new=${newCount}`);
-
         if (newCount > unreadCount) {
           console.log("New message! Playing sound...");
           if (audioRef.current) {
             audioRef.current.currentTime = 0;
-            audioRef.current.play()
-              .then(() => console.log("Playback success"))
-              .catch(e => console.error("Playback failed:", e));
+            audioRef.current.play().catch(e => console.error("Playback failed:", e));
           }
           
           toast("새로운 쪽지가 도착했습니다", {
@@ -64,17 +67,15 @@ export default function MessageNotifier() {
         }
         setUnreadCount(newCount);
       } catch (err) {
-        const detail = err.response?.data?.detail || err.message;
-        console.error(`Unread poll failed (Status ${err.response?.status}):`, detail);
-        
-        if (err.response?.status === 403) {
-          console.log("Current user object from context:", user);
+        // Log but don't spam the console if it's a persistent error
+        if (err.response?.status !== 403) {
+          console.error("Unread count poll failed:", err.message);
         }
       }
     };
 
     checkUnread();
-    const interval = setInterval(checkUnread, 15000);
+    const interval = setInterval(checkUnread, 10000);
     return () => clearInterval(interval);
   }, [user, unreadCount, navigate]);
 
