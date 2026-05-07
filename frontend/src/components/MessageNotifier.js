@@ -10,6 +10,31 @@ export default function MessageNotifier() {
   const navigate = useNavigate();
   const audioRef = useRef(new Audio("/ding.mp3"));
 
+  // Unlock audio on first user interaction to bypass browser autoplay restrictions
+  useEffect(() => {
+    const unlockAudio = () => {
+      if (audioRef.current) {
+        audioRef.current.play()
+          .then(() => {
+            // Immediately pause and reset after success
+            audioRef.current.pause();
+            audioRef.current.currentTime = 0;
+            console.log("Audio unlocked");
+            document.removeEventListener("click", unlockAudio);
+            document.removeEventListener("touchstart", unlockAudio);
+          })
+          .catch(e => console.log("Audio unlock wait:", e));
+      }
+    };
+
+    document.addEventListener("click", unlockAudio);
+    document.addEventListener("touchstart", unlockAudio);
+    return () => {
+      document.removeEventListener("click", unlockAudio);
+      document.removeEventListener("touchstart", unlockAudio);
+    };
+  }, []);
+
   useEffect(() => {
     if (!user) return;
 
