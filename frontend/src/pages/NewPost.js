@@ -75,9 +75,9 @@ export default function NewPost() {
         </div>
 
         {status?.keyword && (
-          <div className="text-right">
-            <div className="text-[10px] uppercase tracking-[0.3em] fp-mono text-[var(--text-mute)] mb-2">Daily Keyword</div>
-            <div className="text-[14px] uppercase tracking-[0.2em] fp-mono text-[var(--red)] font-black border border-[var(--red)]/30 px-3 py-1 bg-[var(--red)]/5 rounded-full animate-pulse inline-block">
+          <div className="text-right ml-4">
+            <div className="text-[9px] sm:text-[10px] uppercase tracking-[0.3em] fp-mono text-[var(--text-mute)] mb-1 sm:mb-2">Daily Keyword</div>
+            <div className="text-[10px] sm:text-[14px] uppercase tracking-[0.1em] sm:tracking-[0.2em] fp-mono text-[var(--red)] font-black border border-[var(--red)]/30 px-2 sm:px-3 py-1 bg-[var(--red)]/5 rounded-full animate-pulse inline-block whitespace-nowrap">
               {status.keyword}
             </div>
           </div>

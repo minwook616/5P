@@ -160,12 +160,12 @@ function SlotHeader({ status, now, onCompose }) {
 
   return (
     <section data-testid="slot-header">
-      <div className="flex justify-between items-start mb-3">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 mb-3">
         <div className="text-[10px] uppercase tracking-[0.4em] fp-mono text-[var(--text-mute)]">
           {status.today_key}
         </div>
         {status.keyword && (
-          <div className="text-[14px] uppercase tracking-[0.2em] fp-mono text-[var(--red)] font-black animate-pulse border border-[var(--red)]/30 px-3 py-1 bg-[var(--red)]/5 rounded-full">
+          <div className="text-[10px] sm:text-[13px] uppercase tracking-[0.1em] sm:tracking-[0.2em] fp-mono text-[var(--red)] font-black animate-pulse border border-[var(--red)]/30 px-2 sm:px-3 py-1 bg-[var(--red)]/5 rounded-full">
             Today's Keyword: {status.keyword}
           </div>
         )}
