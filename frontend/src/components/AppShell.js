@@ -43,14 +43,15 @@ export default function AppShell() {
         </div>
       </header>
 
-      <div className="max-w-5xl mx-auto px-6 py-8 grid grid-cols-1 md:grid-cols-12 gap-10">
-        <aside className="md:col-span-3 space-y-1">
+      <div className="max-w-5xl mx-auto px-6 py-8 flex flex-col md:grid md:grid-cols-12 gap-10">
+        <aside className="md:col-span-3 space-y-1 order-1">
           {link("/feed", "Feed", "nav-feed")}
           {link("/pillars", "★ The Pillars", "nav-pillars")}
           {link("/post/new", "Compose", "nav-new")}
           {link("/messages", "Messages", "nav-messages")}
           {link("/profile", "Profile", "nav-profile")}
           {user?.is_admin && link("/admin", "Admin · Console", "nav-admin")}
+          
           <div className="pt-8">
             <div className="text-[10px] uppercase tracking-[0.3em] text-[var(--text-mute)] fp-mono">Slogan</div>
             <div className="text-xs text-[var(--text-dim)] mt-2 leading-relaxed">
@@ -58,7 +59,8 @@ export default function AppShell() {
             </div>
           </div>
 
-          <div className="pt-10 space-y-6">
+          {/* Principles in sidebar for Desktop */}
+          <div className="hidden md:block pt-10 space-y-6">
             <div className="text-[10px] uppercase tracking-[0.3em] text-[var(--text-mute)] fp-mono">Principles</div>
             <div className="space-y-4 text-[13px] font-bold leading-snug tracking-tight">
               <div>
@@ -85,9 +87,44 @@ export default function AppShell() {
           </div>
         </aside>
 
-        <main className="md:col-span-9 fp-fade">
+        <main className="md:col-span-9 fp-fade order-2">
           <Outlet />
         </main>
+
+        {/* Principles at the bottom for Mobile */}
+        <aside className="md:hidden order-3">
+          <div className="pt-10 pb-20 space-y-6">
+            <div className="text-[10px] uppercase tracking-[0.3em] text-[var(--text-mute)] fp-mono">Principles</div>
+            <div className="space-y-4 text-[13px] font-bold leading-snug tracking-tight">
+              <div>
+                <span className="text-[var(--red)] block mb-1">01. Global Limit</span>
+                <span className="text-[var(--text)]">Exactly 5 posts per day allowed.</span>
+              </div>
+              <div>
+                <span className="text-[var(--red)] block mb-1">02. Individual Limit</span>
+                <span className="text-[var(--text)]">1 post per person daily.</span>
+              </div>
+              <div>
+                <span className="text-[var(--red)] block mb-1">03. Auto-Purge</span>
+                <span className="text-[var(--text)]">Everything vanishes after 24h.</span>
+              </div>
+              <div>
+                <span className="text-[var(--red)] block mb-1">04. The Pillars</span>
+                <span className="text-[var(--text)]">15+ likes promote you to Pillar status and grant an invite key.</span>
+              </div>
+              <div>
+                <span className="text-[var(--red)] block mb-1">05. Clean Community</span>
+                <span className="text-[var(--text)]">Zero tolerance for hate, ads, or real names.</span>
+              </div>
+            </div>
+          </div>
+        </aside>
+
+        {/* Hidden on mobile, visible on desktop sidebar */}
+        <aside className="hidden md:block md:absolute md:invisible">
+          {/* This is a structural trick to keep the desktop sidebar unified if needed, 
+              but since we already have the aside at the top, we just need to add Principles there for desktop */}
+        </aside>
       </div>
     </div>
   );

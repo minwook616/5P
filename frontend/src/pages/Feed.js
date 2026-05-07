@@ -101,16 +101,16 @@ export default function Feed() {
       )}
       
       <div className="relative z-10 flex items-center flex-wrap gap-x-3 gap-y-1 text-[13px] uppercase tracking-[0.3em] fp-mono text-gray-300 mb-3">
-        <span>{p.is_admin_post ? <span className="text-[var(--red)]">{p.author_label}</span> : p.author_label}</span>
-        <span>·</span>
-        <span>{relTime(p.created_at)}</span>
+        <span className="truncate min-w-0">{p.is_admin_post ? <span className="text-[var(--red)]">{p.author_label}</span> : p.author_label}</span>
+        <span className="flex-shrink-0">·</span>
+        <span className="flex-shrink-0">{relTime(p.created_at)}</span>
         {p.location && (
           <>
-            <span>·</span>
-            <span className="text-zinc-500 italic opacity-80">{p.location}</span>
+            <span className="flex-shrink-0">·</span>
+            <span className="text-zinc-500 italic opacity-80 truncate max-w-[150px]">{p.location}</span>
           </>
         )}
-        {p.blinded && <><span>·</span><span className="text-[var(--red)]">Blinded</span></>}
+        {p.blinded && <><span className="flex-shrink-0">·</span><span className="text-[var(--red)] flex-shrink-0">Blinded</span></>}
       </div>
       <div className={`relative z-10 ${p.blinded && !user?.is_admin ? "fp-blinded" : ""}`}>
         <h3 className="text-xl font-bold tracking-tight group-hover:text-[var(--text)] text-[var(--text)] mb-2 flex items-center gap-2">

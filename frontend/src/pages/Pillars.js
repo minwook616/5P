@@ -63,12 +63,12 @@ export default function Pillars() {
             >
               <div className="absolute top-0 left-0 w-1 h-full" style={{background: "linear-gradient(180deg, #D4AF37, #C8102E)"}}/>
               <div className="flex items-center gap-3 text-[13px] uppercase tracking-[0.3em] fp-mono mb-3" style={{color: "#D4AF37"}}>
-                <span>★ Pillar</span>
+                <span className="flex-shrink-0">★ Pillar</span>
                 <span className="text-[var(--text-mute)]">·</span>
-                <span className="text-[var(--text-mute)]">{p.is_admin_post ? <span className="text-[var(--red)]">{p.author_label}</span> : p.author_label}</span>
-                <span className="text-[var(--text-mute)]">·</span>
-                <span className="text-[var(--text-mute)]">{relTime(p.created_at)}</span>
-                <span className="ml-auto fp-mono text-[var(--red)] text-base font-bold">♥ {p.like_count}</span>
+                <span className="text-[var(--text-mute)] truncate min-w-0">{p.is_admin_post ? <span className="text-[var(--red)]">{p.author_label}</span> : p.author_label}</span>
+                <span className="text-[var(--text-mute)] flex-shrink-0">·</span>
+                <span className="text-[var(--text-mute)] flex-shrink-0">{relTime(p.created_at)}</span>
+                <span className="ml-auto flex-shrink-0 fp-mono text-[var(--red)] text-base font-bold pl-2">♥ {p.like_count}</span>
               </div>
               <h3 className="text-2xl font-bold tracking-tight mb-2 text-[var(--text)]">{p.title}</h3>
               <p className="text-sm text-[var(--text-dim)] line-clamp-2 leading-relaxed">{p.content}</p>
