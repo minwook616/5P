@@ -19,6 +19,7 @@ import Admin from "@/pages/Admin";
 import AppShell from "@/components/AppShell";
 import { Toaster } from "@/components/ui/sonner";
 import MessageNotifier from "@/components/MessageNotifier";
+import InstallPrompt from "@/components/InstallPrompt";
 
 function Loading() {
   return (
@@ -111,10 +112,6 @@ export default function App() {
           }}
         />
       </AuthProvider>
-    </div>
-  );
-}
-ider>
     </div>
   );
 }
