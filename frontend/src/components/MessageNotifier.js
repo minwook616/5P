@@ -17,6 +17,7 @@ export default function MessageNotifier() {
       try {
         if (!audioRef.current) {
           audioRef.current = new Audio("/ding.mp3");
+          audioRef.current.volume = 0.4; // Reduce volume to 40%
           audioRef.current.load(); // Force load
         }
         
