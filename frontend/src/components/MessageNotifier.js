@@ -8,26 +8,32 @@ export default function MessageNotifier() {
   const { user } = useAuth();
   const [unreadCount, setUnreadCount] = useState(0);
   const navigate = useNavigate();
-  const audioRef = useRef(new Audio("/ding.mp3"));
+  const audioRef = useRef(null);
 
-  // Unlock audio on first user interaction to bypass browser autoplay restrictions
+  // Initialize and unlock audio on first user interaction
   useEffect(() => {
     const unlockAudio = () => {
-      console.log("Attempting to unlock audio...");
-      if (audioRef.current) {
-        audioRef.current.play()
-          .then(() => {
-            // Immediately pause and reset after success
-            audioRef.current.pause();
-            audioRef.current.currentTime = 0;
-            console.log("Audio unlocked successfully");
-            document.removeEventListener("click", unlockAudio);
-            document.removeEventListener("touchstart", unlockAudio);
-          })
-          .catch(e => {
-            console.warn("Audio unlock failed, will retry on next interaction:", e);
-          });
+      console.log("Attempting to initialize and unlock audio...");
+      
+      // Create fresh audio object if it doesn't exist
+      if (!audioRef.current) {
+        audioRef.current = new Audio("/ding.mp3");
       }
+
+      audioRef.current.play()
+        .then(() => {
+          // Immediately pause and reset after success
+          audioRef.current.pause();
+          audioRef.current.currentTime = 0;
+          console.log("Audio unlocked successfully");
+          document.removeEventListener("click", unlockAudio);
+          document.removeEventListener("touchstart", unlockAudio);
+        })
+        .catch(e => {
+          console.warn("Audio unlock failed, will retry on next interaction:", e);
+          // If it fails with "No supported sources", try re-initializing
+          audioRef.current = new Audio("/ding.mp3");
+        });
     };
 
     document.addEventListener("click", unlockAudio);

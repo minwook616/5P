@@ -1582,7 +1582,11 @@ app.include_router(api)
 origins = [
     "https://ia5p.com",
     "https://www.ia5p.com",
-    "http://localhost:3000", # 로컬 테스트용
+    "https://5-p.vercel.app",
+    "http://localhost:3000",
+    "http://localhost:5173",
+    "http://127.0.0.1:3000",
+    "http://127.0.0.1:5173",
 ]
 
 app.add_middleware(
