@@ -5,7 +5,8 @@ export default function InstallPrompt() {
 
   useEffect(() => {
     // Check if device is iOS
-    const isiOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+    const userAgent = window.navigator.userAgent.toLowerCase();
+    const isiOS = /iphone|ipad|ipod/.test(userAgent);
     
     // Check if already in standalone mode (PWA installed)
     const isStandalone = window.navigator.standalone === true || window.matchMedia('(display-mode: standalone)').matches;
@@ -13,7 +14,11 @@ export default function InstallPrompt() {
     // Show prompt only on iOS if not installed and not dismissed before
     const isDismissed = localStorage.getItem('pwa_prompt_dismissed');
     
-    if (isiOS && !isStandalone && !isDismissed) {
+    // For debugging: if URL has ?showPrompt=true, show it regardless
+    const urlParams = new URLSearchParams(window.location.search);
+    const forceShow = urlParams.get('showPrompt') === 'true';
+
+    if ((isiOS && !isStandalone && !isDismissed) || forceShow) {
       setShow(true);
     }
   }, []);
@@ -23,7 +28,26 @@ export default function InstallPrompt() {
     localStorage.setItem('pwa_prompt_dismissed', 'true');
   };
 
-  if (!show) return null;
+  const clearDismissed = () => {
+    localStorage.removeItem('pwa_prompt_dismissed');
+    window.location.reload();
+  };
+
+  if (!show) {
+    // Hidden reset button for debugging
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get('debugPWA') === 'true') {
+      return (
+        <button 
+          onClick={clearDismissed}
+          className="fixed bottom-4 left-4 z-[9999] bg-red-600 text-white p-2 rounded text-xs opacity-50 hover:opacity-100"
+        >
+          Reset PWA Prompt
+        </button>
+      );
+    }
+    return null;
+  }
 
   return (
     <div className="fixed bottom-6 left-6 right-6 z-[9999] animate-in fade-in slide-in-from-bottom-4 duration-500">
