@@ -1393,13 +1393,16 @@ async def get_dining_menus(date: Optional[str] = None):
     
     from dining_service import DINING_SLUGS, DiningService, DINING_METADATA
     
-    # 1. Fetch from DB
-    menus = await db["dining_menus"].find({"date": date}).to_list(length=10)
+    # 1. Fetch from DB (filter by current slugs)
+    menus = await db["dining_menus"].find({"date": date, "slug": {"$in": DINING_SLUGS}}).to_list(length=len(DINING_SLUGS))
     
-    # 2. If empty, trigger auto-fetch (parallel)
-    if not menus:
+    # 2. Identify missing slugs and trigger fetch
+    db_map = {m["slug"]: m for m in menus if "slug" in m}
+    missing_slugs = [slug for slug in DINING_SLUGS if slug not in db_map]
+    
+    if missing_slugs:
         service = DiningService(db)
-        for slug in DINING_SLUGS:
+        for slug in missing_slugs:
             asyncio.create_task(service.fetch_and_update_single(slug, date))
 
     # 3. Format result for frontend

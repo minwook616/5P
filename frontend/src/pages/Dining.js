@@ -11,9 +11,9 @@ import { ko } from "date-fns/locale";
 
 // ULTIMATE FRONTEND FALLBACK COORDS
 const ULTIMATE_COORDS = {
-  "union-drive-marketplace": { lat: "42.0253", lng: "-93.6519" },
-  "friley-windows": { lat: "42.0244", lng: "-93.6502" },
-  "seasons-marketplace": { lat: "42.0227", lng: "-93.6393" }
+  "udm": { lat: "42.0253", lng: "-93.6519" },
+  "friley": { lat: "42.0244", lng: "-93.6502" },
+  "seasons": { lat: "42.0227", lng: "-93.6393" }
 };
 
 export default function Dining() {
@@ -21,7 +21,7 @@ export default function Dining() {
   const [diningData, setDiningData] = useState([]);
   const [selectedHall, setSelectedHall] = useState("");
   const [selectedDate, setSelectedDate] = useState(format(new Date(), "yyyy-MM-dd"));
-  const [version] = useState("1.1.1-Final");
+  const [version] = useState("1.2.0-API-Update");
 
   const dates = Array.from({ length: 14 }, (_, i) => {
     const d = addDays(startOfDay(new Date()), i);

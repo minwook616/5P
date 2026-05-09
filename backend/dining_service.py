@@ -12,12 +12,12 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 logger = logging.getLogger("dining_service")
 
-PROXY_DOMAIN = "https://isu-dining-proxy.minwoo01616.workers.dev"
+PROXY_DOMAIN = "https://new.dining.iastate.edu/api"
 
 DINING_METADATA = {
-    "union-drive-marketplace-2-2": {"id": 1, "title": "UDM", "lat": "42.0253", "lng": "-93.6519"},
-    "friley-windows-2-2": {"id": 4, "title": "Friley Windows", "lat": "42.0244", "lng": "-93.6502"},
-    "seasons-marketplace-2-2": {"id": 3, "title": "Seasons Marketplace", "lat": "42.0227", "lng": "-93.6393"}
+    "udm": {"id": 39, "title": "Union Drive (UDM)", "lat": "42.0253", "lng": "-93.6519"},
+    "friley": {"id": 30, "title": "Friley Windows", "lat": "42.0244", "lng": "-93.6502"},
+    "seasons": {"id": 23, "title": "Seasons Marketplace", "lat": "42.0227", "lng": "-93.6393"}
 }
 
 DINING_SLUGS = list(DINING_METADATA.keys())
@@ -43,47 +43,70 @@ class DiningService:
 
     async def fetch_and_update_single(self, slug, date_str):
         meta = DINING_METADATA.get(slug)
-        url = f"{PROXY_DOMAIN}/wp-json/dining/v1/get-single-location/?slug={slug}&date={date_str}"
+        venue_id = meta["id"]
+        url = f"{PROXY_DOMAIN}/venue/{venue_id}/menu/{date_str}"
         
         try:
             loop = asyncio.get_event_loop()
-            resp = await loop.run_in_executor(None, lambda: requests.get(url, timeout=25)) # Longer timeout
+            resp = await loop.run_in_executor(None, lambda: requests.get(url, timeout=25)) 
             
             if resp.status_code != 200:
-                await self.log_error(slug, date_str, f"Proxy Error: {resp.status_code}")
+                await self.log_error(slug, date_str, f"ISU API Error: {resp.status_code}")
                 return None
 
             data = resp.json()
-            if isinstance(data, list) and data: data = data[0]
-            
-            if not data or not data.get("menus"):
-                await self.log_error(slug, date_str, "ISU API: No menu found in JSON")
+            if not data or not data.get("meals"):
+                await self.log_error(slug, date_str, "ISU API: No meals found for this date")
                 return None
 
-            # FAST PARSER
+            # NEW PARSER (Object-based)
             menus = []
-            for m_sec in data.get("menus", []):
-                section_name = m_sec.get("section", "Meal")
+            meals_dict = data.get("meals", {})
+            
+            # Sort meals by their ID or some logic (Breakfast, Lunch, Dinner)
+            # Typically IDs are consistent, but let's just iterate
+            for m_id in sorted(meals_dict.keys(), key=lambda x: int(x)):
+                m_info = meals_dict[m_id]
+                section_name = m_info.get("meal", "Meal")
                 stations = []
-                for display in m_sec.get("menuDisplays", []):
+                
+                displays = m_info.get("menu_displays", {})
+                for d_id in displays:
+                    d_info = displays[d_id]
                     items = []
-                    for cat in display.get("categories", []):
-                        for item in cat.get("menuItems", []):
+                    categories = d_info.get("categories", {})
+                    for c_slug in categories:
+                        cat_info = categories[c_slug]
+                        cat_items = cat_info.get("items", {})
+                        for i_id in cat_items:
+                            item = cat_items[i_id]
+                            
+                            # Nutrients
+                            nutrients = item.get("nutrients", {})
+                            kcal = "0"
+                            if "kcal" in nutrients:
+                                kcal = nutrients["kcal"].get("rounded_quantity") or nutrients["kcal"].get("quantity") or "0"
+                            
+                            # Traits (Vegan, Halal, etc.)
+                            reqs = item.get("traits", {}).get("requirement", {})
+                            
                             items.append({
                                 "name": item.get("name"),
-                                "totalCal": str(item.get("totalCal") or "0"),
-                                "isVegan": bool(item.get("isVegan")),
-                                "isHalal": bool(item.get("isHalal")),
-                                "isVegetarian": bool(item.get("isVegetarian")),
+                                "totalCal": str(kcal),
+                                "isVegan": "vegan" in reqs,
+                                "isHalal": "halal" in reqs,
+                                "isVegetarian": "vegetarian" in reqs,
                                 "name_ko": item.get("name")
                             })
+                    
                     if items:
-                        stations.append({"name": display.get("name", "Station"), "items": items})
+                        stations.append({"name": d_info.get("name", "Station"), "items": items})
+                
                 if stations:
                     menus.append({"section": section_name, "stations": stations})
 
             if not menus:
-                await self.log_error(slug, date_str, "Parser: Failed to extract items")
+                await self.log_error(slug, date_str, "Parser: No items extracted")
                 return None
 
             # TRANSLATE
