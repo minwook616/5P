@@ -1396,12 +1396,13 @@ async def get_dining_menus(date: Optional[str] = None):
     # 1. Fetch from DB
     menus = await db["dining_menus"].find({"date": date}).to_list(length=10)
     
-    # 2. If empty, trigger parallel background fetches for all 3 halls
+    # 2. If empty, trigger parallel background fetches for ALL 3 halls
     if not menus:
         service = DiningService(db)
-        logger.info(f"Triggering parallel auto-fetch for {date}...")
-        tasks = [service.fetch_and_update_single(slug, date) for slug in DINING_SLUGS]
-        asyncio.create_task(asyncio.gather(*tasks))
+        logger.info(f"Triggering full parallel auto-fetch for {date}...")
+        # Create tasks for all slugs, not just one
+        for slug in DINING_SLUGS:
+            asyncio.create_task(service.fetch_and_update_single(slug, date))
 
     # 3. Build guaranteed response
     result = []
@@ -1411,30 +1412,28 @@ async def get_dining_menus(date: Optional[str] = None):
         meta = DINING_METADATA[slug]
         db_item = db_map.get(slug, {})
         
-        # Ensure lat/lng are ALWAYS strings to prevent JS parsing issues
-        lat = str(db_item.get("lat") or meta["lat"])
-        lng = str(db_item.get("lng") or meta["lng"])
+        # UI TITLE FIX: Always prefer our hardcoded metadata title over API "Hours and Menus"
+        title = meta["title"]
         
         hall_data = {
             "slug": slug,
-            "title": db_item.get("title") or meta["title"],
+            "title": title,
             "date": date,
-            "lat": lat,
-            "lng": lng,
+            "lat": str(db_item.get("lat") or meta["lat"]),
+            "lng": str(db_item.get("lng") or meta["lng"]),
             "paymentTypes": db_item.get("paymentTypes") or meta["paymentTypes"],
             "menus": db_item.get("menus") or [],
             "is_fallback": not bool(db_item.get("menus"))
         }
         
-        # Inject placeholder if menus are missing so UI isn't blank
         if not hall_data["menus"]:
             hall_data["menus"] = [{
                 "section": "System Status",
                 "stations": [{
                     "name": "Notice",
                     "items": [{
-                        "name": "Gathering Menu Data...",
-                        "name_ko": "메뉴 데이터를 수집 중입니다 (잠시 후 새로고침 해주세요)",
+                        "name": "Syncing Data...",
+                        "name_ko": "메뉴 데이터를 수집 중입니다 (잠시 후 새로고침)",
                         "totalCal": "0",
                         "isVegan": False, "isHalal": False, "isVegetarian": False
                     }]
