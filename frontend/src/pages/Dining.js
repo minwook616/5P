@@ -5,15 +5,23 @@ import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { MapPin, Utensils, AlertCircle } from "lucide-react";
+import { MapPin, Utensils, AlertCircle, RefreshCw } from "lucide-react";
 import { format, addDays, startOfDay } from "date-fns";
 import { ko } from "date-fns/locale";
+
+// EMERGENCY FRONTEND FALLBACK DATA
+const FALLBACK_COORDS = {
+  "union-drive-marketplace": { lat: 42.0253, lng: -93.6519 },
+  "friley-windows": { lat: 42.0244, lng: -93.6502 },
+  "seasons-marketplace": { lat: 42.0227, lng: -93.6393 }
+};
 
 export default function Dining() {
   const [loading, setLoading] = useState(true);
   const [diningData, setDiningData] = useState([]);
   const [selectedHall, setSelectedHall] = useState("");
   const [selectedDate, setSelectedDate] = useState(format(new Date(), "yyyy-MM-dd"));
+  const [version] = useState("1.0.5"); // VERSION TAG FOR CACHE CHECK
 
   const dates = Array.from({ length: 14 }, (_, i) => {
     const d = addDays(startOfDay(new Date()), i);
@@ -25,10 +33,11 @@ export default function Dining() {
     };
   });
 
-  const fetchDiningData = useCallback(async (date) => {
+  const fetchDiningData = useCallback(async (date, force = false) => {
     try {
       setLoading(true);
-      const res = await api.get(`/dining?date=${date}`);
+      // Add timestamp to bypass potential browser cache
+      const res = await api.get(`/dining?date=${date}&_t=${Date.now()}`);
       const data = Array.isArray(res.data) ? res.data : [];
       setDiningData(data);
       if (data.length > 0) {
@@ -48,9 +57,14 @@ export default function Dining() {
     fetchDiningData(selectedDate);
   }, [selectedDate, fetchDiningData]);
 
-  const openMap = (lat, lng) => {
+  const openMap = (hall) => {
+    // 1. Try coordinate from server
+    // 2. Try hardcoded fallback coordinate
+    const lat = hall.lat || FALLBACK_COORDS[hall.slug]?.lat;
+    const lng = hall.lng || FALLBACK_COORDS[hall.slug]?.lng;
+
     if (!lat || !lng) {
-      alert("좌표 정보를 불러올 수 없습니다. 잠시 후 다시 시도해주세요.");
+      alert("좌표 정보를 찾을 수 없습니다.");
       return;
     }
     const url = `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`;
@@ -61,9 +75,20 @@ export default function Dining() {
     <div className="space-y-6 pb-20">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold tracking-tighter">오늘의 학식</h1>
+          <div className="flex items-center gap-2">
+            <h1 className="text-2xl font-bold tracking-tighter">오늘의 학식</h1>
+            <Badge variant="outline" className="text-[8px] opacity-40 font-mono py-0 h-4">v{version}</Badge>
+          </div>
           <p className="text-[var(--text-dim)] text-xs mt-1 fp-mono uppercase tracking-wider">ISU Dining Korean Guide</p>
         </div>
+        <Button 
+          variant="ghost" 
+          size="icon" 
+          onClick={() => fetchDiningData(selectedDate, true)}
+          className="h-8 w-8 text-[var(--text-dim)]"
+        >
+          <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
+        </Button>
       </div>
 
       <div className="flex overflow-x-auto gap-2 pb-2 no-scrollbar scroll-smooth">
@@ -95,16 +120,19 @@ export default function Dining() {
       ) : diningData.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-24 text-[var(--text-mute)] bg-[var(--bg-card)] border border-[var(--line)]">
           <AlertCircle className="w-12 h-12 mb-4 opacity-10" />
-          <p className="fp-mono text-xs uppercase tracking-[0.2em] text-center px-6">
-            백엔드에서 데이터를 불러오는 데 실패했습니다.<br/>서버가 시작 중이거나 ISU API 점검 중일 수 있습니다.
+          <p className="fp-mono text-xs uppercase tracking-[0.1em] text-center px-6 leading-relaxed">
+            데이터를 불러올 수 없습니다.<br/>서버 연결을 확인해주세요.
           </p>
+          <Button variant="link" className="mt-4 text-[var(--red)]" onClick={() => window.location.reload()}>
+            강제 새로고침
+          </Button>
         </div>
       ) : (
         <Tabs value={selectedHall} onValueChange={setSelectedHall} className="w-full">
           <TabsList className="grid w-full grid-cols-3 bg-[var(--bg-card)] border border-[var(--line)] h-12">
             {diningData.map((hall) => (
               <TabsTrigger key={hall.slug} value={hall.slug} className="text-[10px] uppercase tracking-tighter sm:tracking-widest fp-mono h-full">
-                {(hall.title || "").replace("Dining Center", "").replace("Marketplace", "").trim()}
+                {(hall.title || "").replace("Dining Center", "").replace("Marketplace", "").trim() || hall.slug}
               </TabsTrigger>
             ))}
           </TabsList>
@@ -125,7 +153,7 @@ export default function Dining() {
                 <Button 
                   variant="ghost" 
                   size="sm" 
-                  onClick={() => openMap(hall.lat, hall.lng)}
+                  onClick={() => openMap(hall)}
                   className="text-xs fp-mono uppercase tracking-widest text-[var(--text-dim)] hover:text-[var(--text)] border border-[var(--line)]"
                 >
                   <MapPin className="w-3 h-3 mr-2 text-[var(--red)]" />
@@ -136,10 +164,12 @@ export default function Dining() {
               {(!hall.menus || hall.menus.length === 0) ? (
                 <div className="text-center py-24 bg-[var(--bg-card)] border border-dashed border-[var(--line)] flex flex-col items-center">
                   <Utensils className="w-10 h-10 mb-4 opacity-10" />
-                  <p className="text-[var(--text-mute)] text-xs fp-mono uppercase tracking-widest">
+                  <p className="text-[var(--text-mute)] text-xs fp-mono uppercase tracking-widest text-center px-10 leading-relaxed">
                     {hall.is_fallback ? "메뉴를 동기화 중입니다..." : "오늘은 제공되는 메뉴가 없습니다."}
                   </p>
-                  {hall.is_fallback && <p className="text-[10px] text-[var(--text-dim)] mt-2 italic">(잠시 후 새로고침을 해주세요)</p>}
+                  <p className="text-[10px] text-[var(--text-dim)] mt-4 italic text-center px-6">
+                    (ISU 서버 상태에 따라 수집이 지연될 수 있습니다. 10초 후 새로고침 해보세요.)
+                  </p>
                 </div>
               ) : (
                 <Tabs defaultValue={hall.menus[0].section} className="w-full">
