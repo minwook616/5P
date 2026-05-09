@@ -5,7 +5,7 @@ import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { MapPin, Utensils, AlertCircle, RefreshCw, Zap } from "lucide-react";
+import { MapPin, Utensils, AlertCircle, RefreshCw, Zap, Info } from "lucide-react";
 import { format, addDays, startOfDay } from "date-fns";
 import { ko } from "date-fns/locale";
 
@@ -21,7 +21,7 @@ export default function Dining() {
   const [diningData, setDiningData] = useState([]);
   const [selectedHall, setSelectedHall] = useState("");
   const [selectedDate, setSelectedDate] = useState(format(new Date(), "yyyy-MM-dd"));
-  const [version] = useState("1.0.8-Ultimate");
+  const [version] = useState("1.1.0-Release");
 
   const dates = Array.from({ length: 14 }, (_, i) => {
     const d = addDays(startOfDay(new Date()), i);
@@ -35,8 +35,8 @@ export default function Dining() {
   const fetchDiningData = useCallback(async (date) => {
     try {
       setLoading(true);
-      // CACHE BUSTER: Ensure we always get fresh data from the server
-      const res = await api.get(`/dining?date=${date}&ultimate_bust=${Date.now()}`);
+      // CACHE BUSTER: Force fresh data from server
+      const res = await api.get(`/dining?date=${date}&release_bust=${Date.now()}`);
       const data = Array.isArray(res.data) ? res.data : [];
       setDiningData(data);
       if (data.length > 0) {
@@ -57,12 +57,11 @@ export default function Dining() {
   }, [selectedDate, fetchDiningData]);
 
   const openMap = (hall) => {
-    // 3-LAYER DEFENSE: Server Data -> Frontend Fallback -> Alert
     const lat = hall.lat || ULTIMATE_COORDS[hall.slug]?.lat;
     const lng = hall.lng || ULTIMATE_COORDS[hall.slug]?.lng;
 
     if (!lat || !lng) {
-      alert("지도 정보를 찾을 수 없습니다. v1.0.8 버전인지 확인해주세요.");
+      alert("지도 정보를 찾을 수 없습니다. v1.1.0 버전인지 확인해주세요.");
       return;
     }
     const url = `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`;
@@ -72,15 +71,15 @@ export default function Dining() {
   return (
     <div className="space-y-6 pb-20">
       <div className="flex items-center justify-between">
-        <div>
+        <div className="flex flex-col gap-1">
           <div className="flex items-center gap-2">
             <h1 className="text-2xl font-bold tracking-tighter">오늘의 학식</h1>
-            <Badge className="bg-red-500/10 text-red-500 border-red-500/20 text-[7px] h-4 font-black">v{version}</Badge>
+            <Badge className="bg-blue-500/10 text-blue-500 border-blue-500/20 text-[7px] h-4 font-black">v{version}</Badge>
           </div>
-          <p className="text-[var(--text-dim)] text-[10px] fp-mono uppercase tracking-widest">ISU Dining Guide</p>
+          <p className="text-[var(--text-dim)] text-[10px] fp-mono uppercase tracking-widest">ISU Dining Korean Guide</p>
         </div>
-        <Button variant="ghost" size="icon" onClick={() => window.location.reload()} className="h-9 w-9 text-[var(--text-dim)]">
-          <RefreshCw className="w-4 h-4" />
+        <Button variant="ghost" size="icon" onClick={() => fetchDiningData(selectedDate)} className="h-9 w-9 text-[var(--text-dim)]">
+          <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
         </Button>
       </div>
 
@@ -104,13 +103,16 @@ export default function Dining() {
       {loading ? (
         <div className="space-y-4">
           <Skeleton className="h-12 w-full rounded-none" />
-          <Skeleton className="h-48 w-full rounded-none" />
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <Skeleton className="h-40 w-full rounded-none" />
+            <Skeleton className="h-40 w-full rounded-none" />
+          </div>
         </div>
       ) : diningData.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-32 bg-[var(--bg-card)] border border-[var(--line)] text-[var(--text-mute)]">
           <AlertCircle className="w-10 h-10 mb-4 opacity-10" />
           <p className="text-xs uppercase tracking-widest fp-mono text-center leading-relaxed">
-            SERVER OFFLINE<br/>백엔드 서버와 연결할 수 없습니다.
+            데이터를 불러오는 중입니다.<br/>잠시 후 새로고침 버튼을 눌러주세요.
           </p>
         </div>
       ) : (
@@ -126,30 +128,21 @@ export default function Dining() {
           {diningData.map((hall) => (
             <TabsContent key={hall.slug} value={hall.slug} className="mt-6 space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
               <div className="flex items-center justify-between bg-[var(--bg-card)] p-5 border border-[var(--line)]">
-                <div className="space-y-1">
-                  <h2 className="font-bold text-lg leading-none">{hall.title || "ISU Dining Hall"}</h2>
-                  <div className="flex flex-wrap gap-1.5 pt-1">
-                    {(hall.paymentTypes || []).map((pt) => (
-                      <span key={pt} className="text-[7px] font-bold uppercase tracking-tighter text-[var(--text-dim)] bg-[var(--bg)] px-1.5 py-0.5 border border-[var(--line)]">
-                        {pt}
-                      </span>
-                    ))}
-                  </div>
-                </div>
+                <h2 className="font-bold text-lg leading-none">{hall.title || "ISU Dining Hall"}</h2>
                 <Button 
                   onClick={() => openMap(hall)}
                   className="bg-[var(--bg)] hover:bg-[var(--red)] hover:text-white text-[var(--text)] border border-[var(--line)] text-[9px] fp-mono font-black uppercase h-9 px-4 transition-colors"
                 >
                   <MapPin className="w-3.5 h-3.5 mr-2" />
-                  📍 MAP
+                  📍 지도 보기
                 </Button>
               </div>
 
               {(!hall.menus || hall.menus.length === 0) ? (
-                <div className="py-24 border border-dashed border-[var(--line)] flex flex-col items-center justify-center bg-[var(--bg-card)] animate-pulse">
+                <div className="py-24 border border-dashed border-[var(--line)] flex flex-col items-center justify-center bg-[var(--bg-card)]">
                   <RefreshCw className="w-8 h-8 mb-4 text-[var(--text-dim)] opacity-20 animate-spin" />
-                  <p className="text-[10px] uppercase tracking-[0.3em] text-[var(--text-mute)] font-black">Syncing Live Data...</p>
-                  <p className="text-[9px] text-[var(--text-dim)] mt-4 italic text-center px-8">ISU 서버에서 메뉴를 수집 중입니다. 10초 후 새로고침 하세요.</p>
+                  <p className="text-[10px] uppercase tracking-[0.3em] text-[var(--text-mute)] font-black">수집 중...</p>
+                  <p className="text-[9px] text-[var(--text-dim)] mt-4 italic text-center px-8">ISU 서버에서 데이터를 긁어오고 있습니다.<br/>10초 후 우측 상단 새로고침을 눌러보세요.</p>
                 </div>
               ) : (
                 <Tabs defaultValue={hall.menus[0].section} className="w-full">
