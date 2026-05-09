@@ -46,11 +46,11 @@ export default function AppShell() {
       <div className="max-w-5xl mx-auto px-6 py-8 flex flex-col md:grid md:grid-cols-12 gap-10">
         {/* Sidebar: Top on mobile, Left on desktop */}
         <aside className="md:col-span-3 space-y-1">
-          {link("/feed", "Feed", "nav-feed")}
           {link("/pillars", "★ The Pillars", "nav-pillars")}
-          {link("/dining", "Dining", "nav-dining")}
+          {link("/feed", "Feed", "nav-feed")}
           {link("/post/new", "Compose", "nav-new")}
           {link("/messages", "Messages", "nav-messages")}
+          {link("/dining", "Dining", "nav-dining")}
           {link("/profile", "Profile", "nav-profile")}
           {user?.is_admin && link("/admin", "Admin · Console", "nav-admin")}
           
