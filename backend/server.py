@@ -1393,21 +1393,47 @@ async def get_dining_menus(date: Optional[str] = None):
     
     menus = await db["dining_menus"].find({"date": date}).to_list(length=10)
     
-    # If no menus found, try to auto-fetch once
+    # If no menus found in DB, try auto-fetch
     if not menus:
         from dining_service import DiningService, DINING_SLUGS
         service = DiningService(db)
         logger.info(f"No dining data for {date}. Triggering auto-fetch...")
-        
-        tasks = [service.fetch_and_update_single(slug, date) for slug in DINING_SLUGS]
-        await asyncio.gather(*tasks)
-        
-        # Try fetching from DB again
-        menus = await db["dining_menus"].find({"date": date}).to_list(length=10)
+        try:
+            tasks = [service.fetch_and_update_single(slug, date) for slug in DINING_SLUGS]
+            await asyncio.gather(*tasks)
+            menus = await db["dining_menus"].find({"date": date}).to_list(length=10)
+        except Exception as e:
+            logger.error(f"Auto-fetch failed: {e}")
+
+    # FINAL FALLBACK: If still no data or coordinates are missing, provide essential metadata
+    # This ensures the map and tabs always work even if ISU API is down.
+    if not menus:
+        from dining_service import DINING_METADATA
+        logger.info("Providing emergency fallback metadata for frontend.")
+        fallback_menus = []
+        for slug, meta in DINING_METADATA.items():
+            fallback_menus.append({
+                "slug": slug,
+                "title": meta["title"],
+                "date": date,
+                "lat": meta["lat"],
+                "lng": meta["lng"],
+                "paymentTypes": meta["paymentTypes"],
+                "menus": [],
+                "is_fallback": True # Mark as fallback
+            })
+        return fallback_menus
 
     for m in menus:
         if "_id" in m:
             m["_id"] = str(m["_id"])
+        # Ensure lat/lng are present from metadata if DB doc is missing them
+        if not m.get("lat") or not m.get("lng"):
+            from dining_service import DINING_METADATA
+            meta = DINING_METADATA.get(m["slug"], {})
+            m["lat"] = m.get("lat") or meta.get("lat")
+            m["lng"] = m.get("lng") or meta.get("lng")
+            
     return menus
 
 

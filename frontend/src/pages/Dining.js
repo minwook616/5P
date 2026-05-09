@@ -5,7 +5,7 @@ import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { MapPin, Utensils, Calendar as CalendarIcon } from "lucide-react";
+import { MapPin, Utensils, AlertCircle } from "lucide-react";
 import { format, addDays, startOfDay } from "date-fns";
 import { ko } from "date-fns/locale";
 
@@ -15,7 +15,6 @@ export default function Dining() {
   const [selectedHall, setSelectedHall] = useState("");
   const [selectedDate, setSelectedDate] = useState(format(new Date(), "yyyy-MM-dd"));
 
-  // Generate 14 days starting from today
   const dates = Array.from({ length: 14 }, (_, i) => {
     const d = addDays(startOfDay(new Date()), i);
     return {
@@ -33,8 +32,7 @@ export default function Dining() {
       const data = Array.isArray(res.data) ? res.data : [];
       setDiningData(data);
       if (data.length > 0) {
-        // Keep the same hall selected if it exists in the new data, otherwise pick the first one
-        if (!data.find(h => h.slug === selectedHall)) {
+        if (!selectedHall || !data.find(h => h.slug === selectedHall)) {
           setSelectedHall(data[0].slug);
         }
       }
@@ -51,6 +49,10 @@ export default function Dining() {
   }, [selectedDate, fetchDiningData]);
 
   const openMap = (lat, lng) => {
+    if (!lat || !lng) {
+      alert("좌표 정보를 불러올 수 없습니다. 잠시 후 다시 시도해주세요.");
+      return;
+    }
     const url = `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`;
     window.open(url, "_blank");
   };
@@ -64,7 +66,6 @@ export default function Dining() {
         </div>
       </div>
 
-      {/* Date Selector */}
       <div className="flex overflow-x-auto gap-2 pb-2 no-scrollbar scroll-smooth">
         {dates.map((d) => (
           <button
@@ -93,8 +94,10 @@ export default function Dining() {
         </div>
       ) : diningData.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-24 text-[var(--text-mute)] bg-[var(--bg-card)] border border-[var(--line)]">
-          <Utensils className="w-12 h-12 mb-4 opacity-10" />
-          <p className="fp-mono text-xs uppercase tracking-[0.3em]">No menu for {selectedDate}</p>
+          <AlertCircle className="w-12 h-12 mb-4 opacity-10" />
+          <p className="fp-mono text-xs uppercase tracking-[0.2em] text-center px-6">
+            백엔드에서 데이터를 불러오는 데 실패했습니다.<br/>서버가 시작 중이거나 ISU API 점검 중일 수 있습니다.
+          </p>
         </div>
       ) : (
         <Tabs value={selectedHall} onValueChange={setSelectedHall} className="w-full">
@@ -123,16 +126,20 @@ export default function Dining() {
                   variant="ghost" 
                   size="sm" 
                   onClick={() => openMap(hall.lat, hall.lng)}
-                  className="text-xs fp-mono uppercase tracking-widest text-[var(--text-dim)] hover:text-[var(--text)]"
+                  className="text-xs fp-mono uppercase tracking-widest text-[var(--text-dim)] hover:text-[var(--text)] border border-[var(--line)]"
                 >
                   <MapPin className="w-3 h-3 mr-2 text-[var(--red)]" />
-                  Map
+                  📍 지도 보기
                 </Button>
               </div>
 
               {(!hall.menus || hall.menus.length === 0) ? (
-                <div className="text-center py-20 bg-[var(--bg-card)] border border-dashed border-[var(--line)]">
-                  <p className="text-[var(--text-mute)] text-xs fp-mono uppercase tracking-widest">Closed This Day</p>
+                <div className="text-center py-24 bg-[var(--bg-card)] border border-dashed border-[var(--line)] flex flex-col items-center">
+                  <Utensils className="w-10 h-10 mb-4 opacity-10" />
+                  <p className="text-[var(--text-mute)] text-xs fp-mono uppercase tracking-widest">
+                    {hall.is_fallback ? "메뉴를 동기화 중입니다..." : "오늘은 제공되는 메뉴가 없습니다."}
+                  </p>
+                  {hall.is_fallback && <p className="text-[10px] text-[var(--text-dim)] mt-2 italic">(잠시 후 새로고침을 해주세요)</p>}
                 </div>
               ) : (
                 <Tabs defaultValue={hall.menus[0].section} className="w-full">
