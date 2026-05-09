@@ -15,7 +15,7 @@ logger = logging.getLogger("dining_service")
 PROXY_DOMAIN = "https://new.dining.iastate.edu/api"
 
 DINING_METADATA = {
-    "udm": {"id": 39, "title": "Union Drive (UDM)", "lat": "42.0253", "lng": "-93.6519"},
+    "udm": {"id": 39, "title": "UDCC", "lat": "42.0253", "lng": "-93.6519"},
     "friley": {"id": 30, "title": "Friley Windows", "lat": "42.0244", "lng": "-93.6502"},
     "seasons": {"id": 23, "title": "Seasons Marketplace", "lat": "42.0227", "lng": "-93.6393"}
 }
@@ -61,34 +61,34 @@ class DiningService:
 
             # NEW PARSER (Object-based)
             menus = []
-            meals_dict = data.get("meals", {})
+            meals_dict = data.get("meals") or {}
             
-            # Sort meals by their ID or some logic (Breakfast, Lunch, Dinner)
-            # Typically IDs are consistent, but let's just iterate
             for m_id in sorted(meals_dict.keys(), key=lambda x: int(x)):
-                m_info = meals_dict[m_id]
+                m_info = meals_dict[m_id] or {}
                 section_name = m_info.get("meal", "Meal")
                 stations = []
                 
-                displays = m_info.get("menu_displays", {})
+                displays = m_info.get("menu_displays") or {}
                 for d_id in displays:
-                    d_info = displays[d_id]
+                    d_info = displays[d_id] or {}
                     items = []
-                    categories = d_info.get("categories", {})
+                    categories = d_info.get("categories") or {}
                     for c_slug in categories:
-                        cat_info = categories[c_slug]
-                        cat_items = cat_info.get("items", {})
+                        cat_info = categories[c_slug] or {}
+                        cat_items = cat_info.get("items") or {}
                         for i_id in cat_items:
                             item = cat_items[i_id]
+                            if not item: continue
                             
                             # Nutrients
-                            nutrients = item.get("nutrients", {})
+                            nutrients = item.get("nutrients") or {}
                             kcal = "0"
                             if "kcal" in nutrients:
-                                kcal = nutrients["kcal"].get("rounded_quantity") or nutrients["kcal"].get("quantity") or "0"
+                                kcal_obj = nutrients["kcal"] or {}
+                                kcal = kcal_obj.get("rounded_quantity") or kcal_obj.get("quantity") or "0"
                             
                             # Traits (Vegan, Halal, etc.)
-                            reqs = item.get("traits", {}).get("requirement", {})
+                            reqs = item.get("traits", {}).get("requirement") or {}
                             
                             items.append({
                                 "name": item.get("name"),
