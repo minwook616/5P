@@ -1391,20 +1391,19 @@ async def get_dining_menus(date: Optional[str] = None):
     if not date:
         date = datetime.now().strftime("%Y-%m-%d")
     
-    # 1. Precise metadata
-    from dining_service import DINING_METADATA, DINING_SLUGS
+    from dining_service import DINING_METADATA, DINING_SLUGS, DiningService
     
-    # 2. Try fetching from DB
+    # 1. Fetch from DB
     menus = await db["dining_menus"].find({"date": date}).to_list(length=10)
     
-    # 3. If empty, trigger background fetch (non-blocking for this request)
+    # 2. If empty, trigger parallel background fetches for all 3 halls
     if not menus:
-        from dining_service import DiningService
         service = DiningService(db)
-        asyncio.create_task(service.fetch_and_update_single(DINING_SLUGS[0], date))
-        logger.info(f"Triggered background fetch for {date}")
+        logger.info(f"Triggering parallel auto-fetch for {date}...")
+        tasks = [service.fetch_and_update_single(slug, date) for slug in DINING_SLUGS]
+        asyncio.create_task(asyncio.gather(*tasks))
 
-    # 4. Build guaranteed response
+    # 3. Build guaranteed response
     result = []
     db_map = {m["slug"]: m for m in menus if "slug" in m}
     
@@ -1412,8 +1411,7 @@ async def get_dining_menus(date: Optional[str] = None):
         meta = DINING_METADATA[slug]
         db_item = db_map.get(slug, {})
         
-        # Merge DB data with hardcoded metadata
-        # We ensure lat/lng are ALWAYS strings for safe frontend parsing
+        # Ensure lat/lng are ALWAYS strings to prevent JS parsing issues
         lat = str(db_item.get("lat") or meta["lat"])
         lng = str(db_item.get("lng") or meta["lng"])
         
@@ -1428,21 +1426,20 @@ async def get_dining_menus(date: Optional[str] = None):
             "is_fallback": not bool(db_item.get("menus"))
         }
         
-        # If menus are still empty, inject a "System Status" item so the UI isn't blank
+        # Inject placeholder if menus are missing so UI isn't blank
         if not hall_data["menus"]:
             hall_data["menus"] = [{
                 "section": "System Status",
                 "stations": [{
                     "name": "Notice",
                     "items": [{
-                        "name": "메뉴 데이터를 동기화 중입니다",
-                        "name_ko": "메뉴 데이터를 동기화 중입니다 (잠시 후 새로고침)",
+                        "name": "Gathering Menu Data...",
+                        "name_ko": "메뉴 데이터를 수집 중입니다 (잠시 후 새로고침 해주세요)",
                         "totalCal": "0",
                         "isVegan": False, "isHalal": False, "isVegetarian": False
                     }]
                 }]
             }]
-            
         result.append(hall_data)
             
     return result
