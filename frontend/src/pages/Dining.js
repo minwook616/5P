@@ -21,7 +21,7 @@ export default function Dining() {
   const [diningData, setDiningData] = useState([]);
   const [selectedHall, setSelectedHall] = useState("");
   const [selectedDate, setSelectedDate] = useState(format(new Date(), "yyyy-MM-dd"));
-  const [version] = useState("1.1.0-Release");
+  const [version] = useState("1.1.1-Final");
 
   const dates = Array.from({ length: 14 }, (_, i) => {
     const d = addDays(startOfDay(new Date()), i);
