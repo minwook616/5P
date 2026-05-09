@@ -1411,13 +1411,31 @@ async def get_dining_menus(date: Optional[str] = None):
         db_item = db_map.get(slug)
         
         if db_item:
+            # If menus are empty, show the status (e.g., Error Log or Syncing)
+            status_msg = db_item.get("status", "메뉴 데이터를 수집 중입니다")
+            menus = db_item.get("menus") or []
+            
+            if not menus:
+                menus = [{
+                    "section": "System Status",
+                    "stations": [{
+                        "name": "Status",
+                        "items": [{
+                            "name": status_msg,
+                            "name_ko": f"{status_msg} (잠시 후 새로고침)",
+                            "totalCal": "0",
+                            "isVegan": False, "isHalal": False, "isVegetarian": False
+                        }]
+                    }]
+                }]
+
             result.append({
                 "slug": slug,
-                "title": meta["title"], # Use metadata title
+                "title": meta["title"],
                 "date": date,
                 "lat": db_item.get("lat") or meta["lat"],
                 "lng": db_item.get("lng") or meta["lng"],
-                "menus": db_item.get("menus") or [],
+                "menus": menus,
                 "is_loading": False
             })
         else:
@@ -1427,7 +1445,18 @@ async def get_dining_menus(date: Optional[str] = None):
                 "date": date,
                 "lat": meta["lat"],
                 "lng": meta["lng"],
-                "menus": [],
+                "menus": [{
+                    "section": "System Status",
+                    "stations": [{
+                        "name": "Notice",
+                        "items": [{
+                            "name": "Syncing Data...",
+                            "name_ko": "메뉴 데이터를 수집 중입니다 (약 10초 소요)",
+                            "totalCal": "0",
+                            "isVegan": False, "isHalal": False, "isVegetarian": False
+                        }]
+                    }]
+                }],
                 "is_loading": True
             })
             
