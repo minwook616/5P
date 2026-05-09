@@ -15,6 +15,7 @@ import NewPost from "@/pages/NewPost";
 import Messages from "@/pages/Messages";
 import Profile from "@/pages/Profile";
 import Pillars from "@/pages/Pillars";
+import Dining from "@/pages/Dining";
 import Admin from "@/pages/Admin";
 import AppShell from "@/components/AppShell";
 import { Toaster } from "@/components/ui/sonner";
@@ -93,6 +94,7 @@ export default function App() {
               <Route path="/feed" element={<Feed />} />
               <Route path="/pillars" element={<Pillars />} />
               <Route path="/champions" element={<Pillars />} />
+              <Route path="/dining" element={<Dining />} />
               <Route path="/post/new" element={<NewPost />} />
               <Route path="/post/:id" element={<PostDetail />} />
               <Route path="/messages" element={<Messages />} />

@@ -28,6 +28,7 @@ from motor.motor_asyncio import AsyncIOMotorClient
 from pydantic import BaseModel, Field, EmailStr
 
 from email_service import send_otp, send_password_reset, send_admin_decision, send_key_granted
+from dining_service import setup_dining_scheduler
 
 from slowapi import Limiter
 from slowapi.util import get_remote_address
@@ -1385,6 +1386,26 @@ async def admin_list_keys(_: dict = Depends(require_admin)):
     return await cursor.to_list(500)
 
 
+@api.get("/dining")
+async def get_dining_menus(date: Optional[str] = None):
+    if not date:
+        date = datetime.now().strftime("%Y-%m-%d")
+    
+    menus = await db["dining_menus"].find({"date": date}).to_list(length=10)
+    for m in menus:
+        if "_id" in m:
+            m["_id"] = str(m["_id"])
+    return menus
+
+
+@api.post("/admin/dining/update")
+async def trigger_dining_update(_: dict = Depends(require_admin)):
+    from dining_service import DiningService
+    service = DiningService(db)
+    asyncio.create_task(service.fetch_and_update_all())
+    return {"message": "Dining update triggered in background"}
+
+
 @api.post("/admin/posts/{pid}/boost")
 async def admin_boost(pid: str, body: AdminBoostIn, _: dict = Depends(require_admin)):
     """Set boost_likes value; recompute pillar status."""
@@ -1601,8 +1622,7 @@ async def startup():
 
 @app.on_event("startup")
 async def startup_v2():
-    # Placeholder for version 2 startup if needed
-    pass
+    setup_dining_scheduler(db)
 
 
 @app.on_event("shutdown")

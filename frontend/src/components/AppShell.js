@@ -48,6 +48,7 @@ export default function AppShell() {
         <aside className="md:col-span-3 space-y-1">
           {link("/feed", "Feed", "nav-feed")}
           {link("/pillars", "★ The Pillars", "nav-pillars")}
+          {link("/dining", "Dining", "nav-dining")}
           {link("/post/new", "Compose", "nav-new")}
           {link("/messages", "Messages", "nav-messages")}
           {link("/profile", "Profile", "nav-profile")}
