@@ -1391,50 +1391,66 @@ async def get_dining_menus(date: Optional[str] = None):
     if not date:
         date = datetime.now().strftime("%Y-%m-%d")
     
+    # 1. Fetch from DB
     menus = await db["dining_menus"].find({"date": date}).to_list(length=10)
     
-    # If no menus found in DB, try auto-fetch
+    # 2. Map of exact slugs and metadata
+    from dining_service import DINING_METADATA
+    
+    # 3. If no menus in DB, trigger auto-fetch
     if not menus:
         from dining_service import DiningService, DINING_SLUGS
         service = DiningService(db)
         logger.info(f"No dining data for {date}. Triggering auto-fetch...")
         try:
+            # Clear old/broken entries for this date if any (e.g. wrong slugs)
+            await db["dining_menus"].delete_many({"date": date})
             tasks = [service.fetch_and_update_single(slug, date) for slug in DINING_SLUGS]
             await asyncio.gather(*tasks)
             menus = await db["dining_menus"].find({"date": date}).to_list(length=10)
         except Exception as e:
             logger.error(f"Auto-fetch failed: {e}")
 
-    # FINAL FALLBACK: If still no data or coordinates are missing, provide essential metadata
-    # This ensures the map and tabs always work even if ISU API is down.
-    if not menus:
-        from dining_service import DINING_METADATA
-        logger.info("Providing emergency fallback metadata for frontend.")
-        fallback_menus = []
-        for slug, meta in DINING_METADATA.items():
-            fallback_menus.append({
+    # 4. Result preparation
+    result = []
+    
+    # Use a set to track which slugs we've already included in the response
+    included_slugs = set()
+    
+    # Process existing menus from DB
+    for m in menus:
+        slug = m.get("slug")
+        if not slug or slug not in DINING_METADATA: continue
+        
+        meta = DINING_METADATA[slug]
+        included_slugs.add(slug)
+        
+        result.append({
+            "slug": slug,
+            "title": m.get("title") or meta["title"],
+            "date": date,
+            "lat": float(m.get("lat") or meta["lat"]),
+            "lng": float(m.get("lng") or meta["lng"]),
+            "paymentTypes": m.get("paymentTypes") or meta["paymentTypes"],
+            "menus": m.get("menus") or [],
+            "is_fallback": False
+        })
+    
+    # 5. Ensure all 3 halls are present (Emergency Fallback)
+    for slug, meta in DINING_METADATA.items():
+        if slug not in included_slugs:
+            result.append({
                 "slug": slug,
                 "title": meta["title"],
                 "date": date,
-                "lat": meta["lat"],
-                "lng": meta["lng"],
+                "lat": float(meta["lat"]),
+                "lng": float(meta["lng"]),
                 "paymentTypes": meta["paymentTypes"],
                 "menus": [],
-                "is_fallback": True # Mark as fallback
+                "is_fallback": True
             })
-        return fallback_menus
-
-    for m in menus:
-        if "_id" in m:
-            m["_id"] = str(m["_id"])
-        # Ensure lat/lng are present from metadata if DB doc is missing them
-        if not m.get("lat") or not m.get("lng"):
-            from dining_service import DINING_METADATA
-            meta = DINING_METADATA.get(m["slug"], {})
-            m["lat"] = m.get("lat") or meta.get("lat")
-            m["lng"] = m.get("lng") or meta.get("lng")
             
-    return menus
+    return result
 
 
 @api.post("/admin/dining/update")
