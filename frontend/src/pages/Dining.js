@@ -22,12 +22,15 @@ export default function Dining() {
     try {
       setLoading(true);
       const res = await axios.get(`${API_BASE}/api/dining`, { withCredentials: true });
-      setDiningData(res.data);
-      if (res.data.length > 0) {
-        setSelectedHall(res.data[0].slug);
+      // Ensure res.data is an array to avoid mapping over non-array objects
+      const data = Array.isArray(res.data) ? res.data : [];
+      setDiningData(data);
+      if (data.length > 0) {
+        setSelectedHall(data[0].slug);
       }
     } catch (err) {
       console.error("Failed to fetch dining data", err);
+      setDiningData([]);
     } finally {
       setLoading(false);
     }
@@ -72,7 +75,7 @@ export default function Dining() {
         <TabsList className="grid w-full grid-cols-3 bg-[var(--bg-card)] border border-[var(--line)]">
           {diningData.map((hall) => (
             <TabsTrigger key={hall.slug} value={hall.slug} className="text-[10px] uppercase tracking-tighter sm:tracking-widest fp-mono">
-              {hall.title.replace("Dining Center", "").replace("Marketplace", "").trim()}
+              {(hall.title || "").replace("Dining Center", "").replace("Marketplace", "").trim()}
             </TabsTrigger>
           ))}
         </TabsList>
@@ -81,9 +84,9 @@ export default function Dining() {
           <TabsContent key={hall.slug} value={hall.slug} className="mt-6 space-y-6">
             <div className="flex items-center justify-between bg-[var(--bg-card)] p-4 border border-[var(--line)]">
               <div>
-                <h2 className="font-bold text-lg">{hall.title}</h2>
+                <h2 className="font-bold text-lg">{hall.title || "Unknown Hall"}</h2>
                 <div className="flex gap-2 mt-2">
-                  {hall.paymentTypes.map((pt) => (
+                  {(hall.paymentTypes || []).map((pt) => (
                     <Badge key={pt} variant="outline" className="text-[9px] uppercase font-normal py-0 px-1 opacity-60">
                       {pt}
                     </Badge>
@@ -101,7 +104,7 @@ export default function Dining() {
               </Button>
             </div>
 
-            {hall.menus.length === 0 ? (
+            {(!hall.menus || hall.menus.length === 0) ? (
               <p className="text-center py-10 text-[var(--text-mute)] text-xs fp-mono">Closed Today</p>
             ) : (
               <Tabs defaultValue={hall.menus[0].section} className="w-full">
@@ -119,7 +122,7 @@ export default function Dining() {
 
                 {hall.menus.map((meal) => (
                   <TabsContent key={meal.section} value={meal.section} className="space-y-8 animate-in fade-in slide-in-from-bottom-2 duration-300">
-                    {meal.stations.map((station) => (
+                    {(meal.stations || []).map((station) => (
                       <div key={station.name} className="space-y-4">
                         <div className="flex items-center gap-3">
                           <div className="h-[1px] flex-1 bg-[var(--line)]" />
@@ -130,7 +133,7 @@ export default function Dining() {
                         </div>
 
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                          {station.items.map((item, idx) => (
+                          {(station.items || []).map((item, idx) => (
                             <Card key={idx} className="bg-[var(--bg-card)] border-[var(--line)] rounded-none overflow-hidden hover:border-[var(--text-mute)] transition-colors">
                               <CardContent className="p-4 flex flex-col justify-between h-full space-y-3">
                                 <div className="space-y-1">
