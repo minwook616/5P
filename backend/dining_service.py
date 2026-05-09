@@ -59,54 +59,81 @@ class DiningService:
                 await self.log_error(slug, date_str, "ISU API: No meals found for this date")
                 return None
 
-            # NEW PARSER (Object-based)
+            # NEW PARSER (Object-based) - Super Defensive
             menus = []
-            meals_dict = data.get("meals") or {}
+            meals_dict = data.get("meals")
+            if not isinstance(meals_dict, dict):
+                meals_dict = {}
             
-            for m_id in sorted(meals_dict.keys(), key=lambda x: int(x)):
-                m_info = meals_dict[m_id] or {}
+            # Sort meals safely
+            try:
+                m_keys = sorted(meals_dict.keys(), key=lambda x: int(x) if str(x).isdigit() else 999)
+            except:
+                m_keys = list(meals_dict.keys())
+
+            for m_id in m_keys:
+                m_info = meals_dict.get(m_id)
+                if not isinstance(m_info, dict): continue
+                
                 section_name = m_info.get("meal", "Meal")
                 stations = []
                 
-                displays = m_info.get("menu_displays") or {}
+                displays = m_info.get("menu_displays")
+                if not isinstance(displays, dict): displays = {}
+                
                 for d_id in displays:
-                    d_info = displays[d_id] or {}
-                    items = []
-                    categories = d_info.get("categories") or {}
+                    d_info = displays.get(d_id)
+                    if not isinstance(d_info, dict): continue
+                    
+                    items_list = []
+                    categories = d_info.get("categories")
+                    if not isinstance(categories, dict): categories = {}
+                    
                     for c_slug in categories:
-                        cat_info = categories[c_slug] or {}
-                        cat_items = cat_info.get("items") or {}
+                        cat_info = categories.get(c_slug)
+                        if not isinstance(cat_info, dict): continue
+                        
+                        cat_items = cat_info.get("items")
+                        if not isinstance(cat_items, dict): cat_items = {}
+                        
                         for i_id in cat_items:
-                            item = cat_items[i_id]
-                            if not item: continue
+                            item = cat_items.get(i_id)
+                            if not isinstance(item, dict): continue
                             
                             # Nutrients
-                            nutrients = item.get("nutrients") or {}
+                            nutrients = item.get("nutrients")
+                            if not isinstance(nutrients, dict): nutrients = {}
+                            
                             kcal = "0"
                             if "kcal" in nutrients:
-                                kcal_obj = nutrients["kcal"] or {}
-                                kcal = kcal_obj.get("rounded_quantity") or kcal_obj.get("quantity") or "0"
+                                kcal_obj = nutrients.get("kcal")
+                                if isinstance(kcal_obj, dict):
+                                    kcal = str(kcal_obj.get("rounded_quantity") or kcal_obj.get("quantity") or "0")
                             
                             # Traits (Vegan, Halal, etc.)
-                            reqs = item.get("traits", {}).get("requirement") or {}
+                            traits = item.get("traits")
+                            if not isinstance(traits, dict): traits = {}
                             
-                            items.append({
-                                "name": item.get("name"),
-                                "totalCal": str(kcal),
+                            reqs = traits.get("requirement")
+                            if not isinstance(reqs, dict): reqs = {}
+                            
+                            items_list.append({
+                                "name": item.get("name") or "Unknown Item",
+                                "totalCal": kcal,
                                 "isVegan": "vegan" in reqs,
                                 "isHalal": "halal" in reqs,
                                 "isVegetarian": "vegetarian" in reqs,
-                                "name_ko": item.get("name")
+                                "name_ko": item.get("name") or "Unknown Item"
                             })
                     
-                    if items:
-                        stations.append({"name": d_info.get("name", "Station"), "items": items})
+                    if items_list:
+                        stations.append({"name": d_info.get("name", "Station"), "items": items_list})
                 
                 if stations:
                     menus.append({"section": section_name, "stations": stations})
 
             if not menus:
-                await self.log_error(slug, date_str, "Parser: No items extracted")
+                await self.log_error(slug, date_str, "Parser: No items extracted (possibly closed)")
                 return None
 
             # TRANSLATE
