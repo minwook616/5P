@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import axios from "axios";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
@@ -28,17 +28,14 @@ export default function Dining() {
     };
   });
 
-  useEffect(() => {
-    fetchDiningData(selectedDate);
-  }, [selectedDate]);
-
-  const fetchDiningData = async (date) => {
+  const fetchDiningData = useCallback(async (date) => {
     try {
       setLoading(true);
       const res = await axios.get(`${API_BASE}/api/dining?date=${date}`, { withCredentials: true });
       const data = Array.isArray(res.data) ? res.data : [];
       setDiningData(data);
       if (data.length > 0) {
+        // Keep the same hall selected if it exists in the new data, otherwise pick the first one
         if (!data.find(h => h.slug === selectedHall)) {
           setSelectedHall(data[0].slug);
         }
@@ -49,7 +46,11 @@ export default function Dining() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [selectedHall]);
+
+  useEffect(() => {
+    fetchDiningData(selectedDate);
+  }, [selectedDate, fetchDiningData]);
 
   const openMap = (lat, lng) => {
     const url = `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`;
