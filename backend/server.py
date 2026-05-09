@@ -1391,64 +1391,59 @@ async def get_dining_menus(date: Optional[str] = None):
     if not date:
         date = datetime.now().strftime("%Y-%m-%d")
     
-    # 1. Fetch from DB
+    # 1. Precise metadata
+    from dining_service import DINING_METADATA, DINING_SLUGS
+    
+    # 2. Try fetching from DB
     menus = await db["dining_menus"].find({"date": date}).to_list(length=10)
     
-    # 2. Map of exact slugs and metadata
-    from dining_service import DINING_METADATA
-    
-    # 3. If no menus in DB, trigger auto-fetch
+    # 3. If empty, trigger background fetch (non-blocking for this request)
     if not menus:
-        from dining_service import DiningService, DINING_SLUGS
+        from dining_service import DiningService
         service = DiningService(db)
-        logger.info(f"No dining data for {date}. Triggering auto-fetch...")
-        try:
-            # Clear old/broken entries for this date if any (e.g. wrong slugs)
-            await db["dining_menus"].delete_many({"date": date})
-            tasks = [service.fetch_and_update_single(slug, date) for slug in DINING_SLUGS]
-            await asyncio.gather(*tasks)
-            menus = await db["dining_menus"].find({"date": date}).to_list(length=10)
-        except Exception as e:
-            logger.error(f"Auto-fetch failed: {e}")
+        asyncio.create_task(service.fetch_and_update_single(DINING_SLUGS[0], date))
+        logger.info(f"Triggered background fetch for {date}")
 
-    # 4. Result preparation
+    # 4. Build guaranteed response
     result = []
+    db_map = {m["slug"]: m for m in menus if "slug" in m}
     
-    # Use a set to track which slugs we've already included in the response
-    included_slugs = set()
-    
-    # Process existing menus from DB
-    for m in menus:
-        slug = m.get("slug")
-        if not slug or slug not in DINING_METADATA: continue
-        
+    for slug in DINING_SLUGS:
         meta = DINING_METADATA[slug]
-        included_slugs.add(slug)
+        db_item = db_map.get(slug, {})
         
-        result.append({
+        # Merge DB data with hardcoded metadata
+        # We ensure lat/lng are ALWAYS strings for safe frontend parsing
+        lat = str(db_item.get("lat") or meta["lat"])
+        lng = str(db_item.get("lng") or meta["lng"])
+        
+        hall_data = {
             "slug": slug,
-            "title": m.get("title") or meta["title"],
+            "title": db_item.get("title") or meta["title"],
             "date": date,
-            "lat": float(m.get("lat") or meta["lat"]),
-            "lng": float(m.get("lng") or meta["lng"]),
-            "paymentTypes": m.get("paymentTypes") or meta["paymentTypes"],
-            "menus": m.get("menus") or [],
-            "is_fallback": False
-        })
-    
-    # 5. Ensure all 3 halls are present (Emergency Fallback)
-    for slug, meta in DINING_METADATA.items():
-        if slug not in included_slugs:
-            result.append({
-                "slug": slug,
-                "title": meta["title"],
-                "date": date,
-                "lat": float(meta["lat"]),
-                "lng": float(meta["lng"]),
-                "paymentTypes": meta["paymentTypes"],
-                "menus": [],
-                "is_fallback": True
-            })
+            "lat": lat,
+            "lng": lng,
+            "paymentTypes": db_item.get("paymentTypes") or meta["paymentTypes"],
+            "menus": db_item.get("menus") or [],
+            "is_fallback": not bool(db_item.get("menus"))
+        }
+        
+        # If menus are still empty, inject a "System Status" item so the UI isn't blank
+        if not hall_data["menus"]:
+            hall_data["menus"] = [{
+                "section": "System Status",
+                "stations": [{
+                    "name": "Notice",
+                    "items": [{
+                        "name": "메뉴 데이터를 동기화 중입니다",
+                        "name_ko": "메뉴 데이터를 동기화 중입니다 (잠시 후 새로고침)",
+                        "totalCal": "0",
+                        "isVegan": False, "isHalal": False, "isVegetarian": False
+                    }]
+                }]
+            }]
+            
+        result.append(hall_data)
             
     return result
 
