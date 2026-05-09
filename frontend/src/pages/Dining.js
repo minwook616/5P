@@ -39,7 +39,6 @@ export default function Dining() {
       const data = Array.isArray(res.data) ? res.data : [];
       setDiningData(data);
       if (data.length > 0) {
-        // Keep the same hall selected if it exists in the new data, otherwise pick the first one
         if (!data.find(h => h.slug === selectedHall)) {
           setSelectedHall(data[0].slug);
         }
