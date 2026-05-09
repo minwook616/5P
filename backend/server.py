@@ -1392,6 +1392,19 @@ async def get_dining_menus(date: Optional[str] = None):
         date = datetime.now().strftime("%Y-%m-%d")
     
     menus = await db["dining_menus"].find({"date": date}).to_list(length=10)
+    
+    # If no menus found, try to auto-fetch once
+    if not menus:
+        from dining_service import DiningService, DINING_SLUGS
+        service = DiningService(db)
+        logger.info(f"No dining data for {date}. Triggering auto-fetch...")
+        
+        tasks = [service.fetch_and_update_single(slug, date) for slug in DINING_SLUGS]
+        await asyncio.gather(*tasks)
+        
+        # Try fetching from DB again
+        menus = await db["dining_menus"].find({"date": date}).to_list(length=10)
+
     for m in menus:
         if "_id" in m:
             m["_id"] = str(m["_id"])

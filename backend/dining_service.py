@@ -4,6 +4,7 @@ import random
 import logging
 import json
 import requests
+import asyncio
 from datetime import datetime, timedelta
 import google.generativeai as genai
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -11,8 +12,12 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 logger = logging.getLogger("dining_service")
 
-# Slugs for the 3 main dining halls
-DINING_SLUGS = ["udm", "friley-windows", "seasons-marketplace"]
+# Correct slugs for ISU Dining
+DINING_SLUGS = [
+    "union-drive-marketplace",
+    "friley-windows-dining-center",
+    "seasons-marketplace"
+]
 
 class DiningService:
     def __init__(self, db):
@@ -35,7 +40,7 @@ class DiningService:
                 try:
                     await self.fetch_and_update_single(slug, date_str)
                     # Random sleep to prevent server blocking
-                    time.sleep(random.uniform(1.0, 3.0))
+                    await asyncio.sleep(random.uniform(1.0, 2.0))
                 except Exception as e:
                     logger.error(f"Error updating {slug} for {date_str}: {e}")
         logger.info("Dining data update completed.")
@@ -46,53 +51,61 @@ class DiningService:
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
             "Accept": "application/json, text/plain, */*",
             "Accept-Language": "en-US,en;q=0.9",
-            "Referer": "https://www.dining.iastate.edu/locations/udm/",
+            "Referer": "https://www.dining.iastate.edu/locations/",
             "Origin": "https://www.dining.iastate.edu"
         }
-        response = requests.get(url, headers=headers, timeout=30)
-        if response.status_code != 200:
-            logger.error(f"Failed to fetch data for {slug} on {date_str}: {response.status_code}")
-            return
+        
+        try:
+            # Using requests in a thread to not block event loop
+            loop = asyncio.get_event_loop()
+            response = await loop.run_in_executor(None, lambda: requests.get(url, headers=headers, timeout=30))
+            
+            if response.status_code != 200:
+                logger.error(f"Failed to fetch data for {slug} on {date_str}: {response.status_code}")
+                return None
 
-        data = response.json()
-        if not data:
-            return
+            data = response.json()
+            if not data or not data.get("title"):
+                return None
 
-        # 1. Parse data
-        parsed_data = self.parse_dining_json(data, date_str)
-        if not parsed_data:
-            return
+            # 1. Parse data
+            parsed_data = self.parse_dining_json(data, date_str)
+            if not parsed_data:
+                return None
 
-        # 2. Extract menu items for translation
-        all_menu_items = []
-        for meal in parsed_data["menus"]:
-            for station in meal["stations"]:
-                for item in station["items"]:
-                    all_menu_items.append(item["name"])
-
-        # 3. Batch Translate
-        unique_items = list(set(all_menu_items))
-        if unique_items and self.model:
-            translations = await self.batch_translate(unique_items)
-            # Map translations back
+            # 2. Extract menu items for translation
+            all_menu_items = []
             for meal in parsed_data["menus"]:
                 for station in meal["stations"]:
                     for item in station["items"]:
-                        item["name_ko"] = translations.get(item["name"], item["name"])
-        else:
-            # Fallback if no model or items
-            for meal in parsed_data["menus"]:
-                for station in meal["stations"]:
-                    for item in station["items"]:
-                        item["name_ko"] = item["name"]
+                        all_menu_items.append(item["name"])
 
-        # 4. Upsert into MongoDB
-        await self.collection.update_one(
-            {"slug": slug, "date": date_str},
-            {"$set": parsed_data},
-            upsert=True
-        )
-        logger.info(f"Updated {slug} for {date_str}")
+            # 3. Batch Translate
+            unique_items = list(set(all_menu_items))
+            if unique_items and self.model:
+                translations = await self.batch_translate(unique_items)
+                # Map translations back
+                for meal in parsed_data["menus"]:
+                    for station in meal["stations"]:
+                        for item in station["items"]:
+                            item["name_ko"] = translations.get(item["name"], item["name"])
+            else:
+                for meal in parsed_data["menus"]:
+                    for station in meal["stations"]:
+                        for item in station["items"]:
+                            item["name_ko"] = item["name"]
+
+            # 4. Upsert into MongoDB
+            await self.collection.update_one(
+                {"slug": slug, "date": date_str},
+                {"$set": parsed_data},
+                upsert=True
+            )
+            logger.info(f"Updated {slug} for {date_str}")
+            return parsed_data
+        except Exception as e:
+            logger.error(f"Error in fetch_and_update_single for {slug}: {e}")
+            return None
 
     def parse_dining_json(self, data, date_str):
         try:
@@ -162,10 +175,11 @@ class DiningService:
         prompt = f"다음 메뉴들을 번역해줘:\n{json.dumps(items, ensure_ascii=False)}"
         
         try:
-            response = self.model.generate_content(
+            loop = asyncio.get_event_loop()
+            response = await loop.run_in_executor(None, lambda: self.model.generate_content(
                 f"{system_prompt}\n\n{prompt}",
                 generation_config={"response_mime_type": "application/json"}
-            )
+            ))
             translations = json.loads(response.text)
             return translations
         except Exception as e:
