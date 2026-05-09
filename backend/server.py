@@ -1412,15 +1412,26 @@ async def get_dining_menus(date: Optional[str] = None):
         meta = DINING_METADATA[slug]
         db_item = db_map.get(slug, {})
         
-        # UI TITLE FIX: Always prefer our hardcoded metadata title over API "Hours and Menus"
-        title = meta["title"]
+        # Robust coordinate check: ignore None, empty, or the string 'undefined'
+        lat_raw = db_item.get("lat")
+        lng_raw = db_item.get("lng")
+        
+        if not lat_raw or str(lat_raw).lower() == "undefined":
+            lat = str(meta["lat"])
+        else:
+            lat = str(lat_raw)
+            
+        if not lng_raw or str(lng_raw).lower() == "undefined":
+            lng = str(meta["lng"])
+        else:
+            lng = str(lng_raw)
         
         hall_data = {
             "slug": slug,
-            "title": title,
+            "title": meta["title"], # Always use metadata title to avoid "Hours and Menus"
             "date": date,
-            "lat": str(db_item.get("lat") or meta["lat"]),
-            "lng": str(db_item.get("lng") or meta["lng"]),
+            "lat": lat,
+            "lng": lng,
             "paymentTypes": db_item.get("paymentTypes") or meta["paymentTypes"],
             "menus": db_item.get("menus") or [],
             "is_fallback": not bool(db_item.get("menus"))
