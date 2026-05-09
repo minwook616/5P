@@ -1391,66 +1391,45 @@ async def get_dining_menus(date: Optional[str] = None):
     if not date:
         date = datetime.now().strftime("%Y-%m-%d")
     
-    from dining_service import DINING_METADATA, DINING_SLUGS, DiningService
+    from dining_service import DINING_SLUGS, DiningService, DINING_METADATA
     
     # 1. Fetch from DB
     menus = await db["dining_menus"].find({"date": date}).to_list(length=10)
     
-    # 2. If empty, trigger parallel background fetches for ALL 3 halls
+    # 2. If empty, trigger auto-fetch (parallel)
     if not menus:
         service = DiningService(db)
-        logger.info(f"Triggering full parallel auto-fetch for {date}...")
-        # Create tasks for all slugs, not just one
         for slug in DINING_SLUGS:
             asyncio.create_task(service.fetch_and_update_single(slug, date))
 
-    # 3. Build guaranteed response
+    # 3. Format result for frontend
     result = []
     db_map = {m["slug"]: m for m in menus if "slug" in m}
     
     for slug in DINING_SLUGS:
         meta = DINING_METADATA[slug]
-        db_item = db_map.get(slug, {})
+        db_item = db_map.get(slug)
         
-        # Robust coordinate check: ignore None, empty, or the string 'undefined'
-        lat_raw = db_item.get("lat")
-        lng_raw = db_item.get("lng")
-        
-        if not lat_raw or str(lat_raw).lower() == "undefined":
-            lat = str(meta["lat"])
+        if db_item:
+            result.append({
+                "slug": slug,
+                "title": meta["title"], # Use metadata title
+                "date": date,
+                "lat": db_item.get("lat") or meta["lat"],
+                "lng": db_item.get("lng") or meta["lng"],
+                "menus": db_item.get("menus") or [],
+                "is_loading": False
+            })
         else:
-            lat = str(lat_raw)
-            
-        if not lng_raw or str(lng_raw).lower() == "undefined":
-            lng = str(meta["lng"])
-        else:
-            lng = str(lng_raw)
-        
-        hall_data = {
-            "slug": slug,
-            "title": meta["title"], # Always use metadata title to avoid "Hours and Menus"
-            "date": date,
-            "lat": lat,
-            "lng": lng,
-            "paymentTypes": db_item.get("paymentTypes") or meta["paymentTypes"],
-            "menus": db_item.get("menus") or [],
-            "is_fallback": not bool(db_item.get("menus"))
-        }
-        
-        if not hall_data["menus"]:
-            hall_data["menus"] = [{
-                "section": "System Status",
-                "stations": [{
-                    "name": "Notice",
-                    "items": [{
-                        "name": "Syncing Data...",
-                        "name_ko": "메뉴 데이터를 수집 중입니다 (잠시 후 새로고침)",
-                        "totalCal": "0",
-                        "isVegan": False, "isHalal": False, "isVegetarian": False
-                    }]
-                }]
-            }]
-        result.append(hall_data)
+            result.append({
+                "slug": slug,
+                "title": meta["title"],
+                "date": date,
+                "lat": meta["lat"],
+                "lng": meta["lng"],
+                "menus": [],
+                "is_loading": True
+            })
             
     return result
 

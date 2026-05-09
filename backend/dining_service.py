@@ -12,33 +12,20 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 logger = logging.getLogger("dining_service")
 
-# ULTIMATE METADATA WITH INTERNAL IDs
-# ISU Dining often prefers IDs (1, 3, 4) over slugs for menu queries
-DINING_METADATA = {
-    "union-drive-marketplace": {
-        "id": 1,
-        "title": "Union Drive Marketplace (UDM)",
-        "lat": "42.0253",
-        "lng": "-93.6519",
-        "paymentTypes": ["Meal Office", "Flex Meals", "Dining Dollars"]
-    },
-    "friley-windows-dining-center": {
-        "id": 4,
-        "title": "Friley Windows",
-        "lat": "42.0244",
-        "lng": "-93.6502",
-        "paymentTypes": ["Meal Office", "Flex Meals", "Dining Dollars"]
-    },
-    "seasons-marketplace": {
-        "id": 3,
-        "title": "Seasons Marketplace",
-        "lat": "42.0227",
-        "lng": "-93.6393",
-        "paymentTypes": ["Meal Office", "Flex Meals", "Dining Dollars"]
-    }
-}
+# PROXY & SLUG SETTINGS
+PROXY_BASE_URL = "https://isu-dining-proxy.minwoo01616.workers.dev/wp-json/dining/v1/get-single-location/"
+DINING_HALLS = [
+    {"slug": "union-drive-marketplace-2-2", "display_name": "UDM"},
+    {"slug": "friley-windows-2-2", "display_name": "Friley Windows"},
+    {"slug": "seasons-marketplace-2-2", "display_name": "Seasons"}
+]
 
-DINING_SLUGS = list(DINING_METADATA.keys())
+# Hardcoded metadata fallbacks for reliability
+DINING_COORDS = {
+    "union-drive-marketplace-2-2": {"lat": "42.0253", "lng": "-93.6519"},
+    "friley-windows-2-2": {"lat": "42.0244", "lng": "-93.6502"},
+    "seasons-marketplace-2-2": {"lat": "42.0227", "lng": "-93.6393"}
+}
 
 class DiningService:
     def __init__(self, db):
@@ -52,70 +39,79 @@ class DiningService:
             self.model = None
 
     async def fetch_and_update_all(self):
+        logger.info("Starting dining data update via Proxy...")
         today = datetime.now().date()
-        for i in range(7):
+        for i in range(14):
             date_str = (today + timedelta(days=i)).strftime("%Y-%m-%d")
-            tasks = [self.fetch_and_update_single(slug, date_str) for slug in DINING_SLUGS]
-            await asyncio.gather(*tasks)
-            await asyncio.sleep(1.0)
+            for hall in DINING_HALLS:
+                try:
+                    await self.fetch_and_update_single(hall["slug"], date_str)
+                    await asyncio.sleep(0.5) # Minimal delay since we use proxy
+                except Exception as e:
+                    logger.error(f"Error updating {hall['slug']} for {date_str}: {e}")
+        logger.info("Dining data update completed.")
 
     async def fetch_and_update_single(self, slug, date_str):
-        meta = DINING_METADATA.get(slug)
-        if not meta: return None
-
-        # TRY MULTIPLE API STRATEGIES
-        urls = [
-            f"https://www.dining.iastate.edu/wp-json/dining/menu-hours/get-single-location/?slug={slug}&date={date_str}",
-            f"https://www.dining.iastate.edu/wp-json/dining/v1/get-single-location/?slug={slug}&date={date_str}",
-            f"https://www.dining.iastate.edu/wp-json/dining/v1/get-menus/?location={meta['id']}&date={date_str}"
-        ]
+        url = f"{PROXY_BASE_URL}?slug={slug}&date={date_str}"
         
-        headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
-            "Accept": "application/json",
-            "Referer": "https://www.dining.iastate.edu/hours-menus/",
-        }
-        
-        raw_data = None
-        error_msg = ""
-        
-        for url in urls:
-            try:
-                loop = asyncio.get_event_loop()
-                resp = await loop.run_in_executor(None, lambda: requests.get(url, headers=headers, timeout=12))
-                if resp.status_code == 200:
-                    data = resp.json()
-                    if isinstance(data, list) and data: data = data[0]
-                    
-                    # If this is the 'get-menus' ID-based endpoint, data structure is simpler
-                    if "menus" in data or (isinstance(data, dict) and any(k in data for k in ["Breakfast", "Lunch", "Dinner"])):
-                        raw_data = data
-                        break
-                else:
-                    error_msg += f"[{url} -> {resp.status_code}] "
-            except Exception as e:
-                error_msg += f"[{url} -> {str(e)}] "
-                continue
+        try:
+            loop = asyncio.get_event_loop()
+            resp = await loop.run_in_executor(None, lambda: requests.get(url, timeout=20))
+            if resp.status_code != 200:
+                logger.error(f"Proxy returned {resp.status_code} for {slug}")
+                return None
 
-        # BUILD THE DOCUMENT
-        doc = {
-            "slug": slug,
-            "title": meta["title"],
-            "date": date_str,
-            "lat": meta["lat"],
-            "lng": meta["lng"],
-            "paymentTypes": meta["paymentTypes"],
-            "menus": [],
-            "error_log": error_msg if not raw_data else "Success",
-            "updated_at": datetime.now()
-        }
+            data = resp.json()
+            if isinstance(data, list) and data: data = data[0]
+            if not data or not data.get("menus"):
+                return None
 
-        if raw_data:
-            # FLEXIBLE PARSER
-            menus = []
-            # Normalize raw_data['menus'] or just raw_data if ID endpoint
-            raw_menus = raw_data.get("menus") if "menus" in raw_data else raw_data
+            # 1. Parse JSON
+            parsed_data = self.parse_json(data, date_str, slug)
+            if not parsed_data or not parsed_data["menus"]:
+                return None
+
+            # 2. Batch Translation
+            if self.model:
+                all_names = []
+                for meal in parsed_data["menus"]:
+                    for station in meal["stations"]:
+                        for item in station["items"]:
+                            all_names.append(item["name"])
+                
+                unique_names = list(set(all_names))
+                if unique_names:
+                    translations = await self.batch_translate(unique_names)
+                    for meal in parsed_data["menus"]:
+                        for station in meal["stations"]:
+                            for item in station["items"]:
+                                item["name_ko"] = translations.get(item["name"], item["name"])
             
+            # 3. Upsert into MongoDB
+            await self.collection.update_one(
+                {"slug": slug, "date": date_str},
+                {"$set": parsed_data},
+                upsert=True
+            )
+            logger.info(f"Successfully updated {slug} for {date_str}")
+            return parsed_data
+
+        except Exception as e:
+            logger.error(f"Fetch failed for {slug}: {e}")
+            return None
+
+    def parse_json(self, data, date_str, slug):
+        try:
+            # Extract basic info
+            title = data.get("title", slug)
+            # Use data coordinates or fallback to hardcoded
+            lat = str(data.get("lat") or DINING_COORDS.get(slug, {}).get("lat"))
+            lng = str(data.get("lng") or DINING_COORDS.get(slug, {}).get("lng"))
+            
+            menus = []
+            raw_menus = data.get("menus", [])
+            
+            # Normalize list vs dict
             sections = []
             if isinstance(raw_menus, list): sections = raw_menus
             elif isinstance(raw_menus, dict):
@@ -127,58 +123,64 @@ class DiningService:
                 stations = []
                 displays = sec.get("menuDisplays") or sec.get("stations") or []
                 
-                # If ID endpoint, displays might be a dictionary of stations
-                if isinstance(displays, dict):
-                    displays = [{"name": k, "items": v.get("items", [])} for k, v in displays.items()]
-
                 for d in displays:
                     items = []
-                    raw_items = d.get("items") or []
-                    for cat in d.get("categories", []): raw_items.extend(cat.get("menuItems", []))
+                    # Extract items from categories -> menuItems
+                    for cat in d.get("categories", []):
+                        for mi in cat.get("menuItems", []):
+                            items.append({
+                                "name": mi.get("name"),
+                                "totalCal": str(mi.get("totalCal") or "0"),
+                                "isVegan": bool(mi.get("isVegan", False)),
+                                "isHalal": bool(mi.get("isHalal", False)),
+                                "isVegetarian": bool(mi.get("isVegetarian", False)),
+                                "name_ko": mi.get("name") # Default to English
+                            })
                     
-                    for ri in raw_items:
-                        if not ri.get("name"): continue
-                        items.append({
-                            "name": ri.get("name"),
-                            "totalCal": str(ri.get("totalCal") or ri.get("calories") or "0"),
-                            "isVegan": ri.get("isVegan", False),
-                            "isHalal": ri.get("isHalal", False),
-                            "isVegetarian": ri.get("isVegetarian", False)
-                        })
                     if items:
                         stations.append({"name": d.get("name", "Station"), "items": items})
+                
                 if stations:
                     menus.append({"section": section_name, "stations": stations})
-            
-            doc["menus"] = menus
-            
-            # TRANSLATE
-            if menus and self.model:
-                try:
-                    all_names = list(set([i["name"] for m in menus for s in m["stations"] for i in s["items"]]))
-                    translations = await self.batch_translate(all_names[:40])
-                    for m in menus:
-                        for s in m["stations"]:
-                            for i in s["items"]: i["name_ko"] = translations.get(i["name"], i["name"])
-                except:
-                    for m in menus:
-                        for s in m["stations"]:
-                            for i in s["items"]: i["name_ko"] = i["name"]
 
-        # Final Save
-        await self.collection.update_one({"slug": slug, "date": date_str}, {"$set": doc}, upsert=True)
-        return doc
+            return {
+                "title": title,
+                "slug": slug,
+                "date": date_str,
+                "lat": lat,
+                "lng": lng,
+                "menus": menus,
+                "updated_at": datetime.now()
+            }
+        except Exception as e:
+            logger.error(f"Parsing error: {e}")
+            return None
 
-    async def batch_translate(self, items):
-        if not items or not self.model: return {}
-        try:
-            prompt = f"Return JSON mapping English to Korean: {json.dumps(items)}"
-            loop = asyncio.get_event_loop()
-            resp = await loop.run_in_executor(None, lambda: self.model.generate_content(
-                prompt, generation_config={"response_mime_type": "application/json"}
-            ))
-            return json.loads(resp.text)
-        except: return {}
+    async def batch_translate(self, names):
+        if not self.model: return {}
+        
+        system_prompt = (
+            "너는 미국 유학생을 위한 학식 번역가야. "
+            "주어진 영어 메뉴명을 한국인이 맛을 상상할 수 있게 의역하고 괄호 안에 짧은 설명을 덧붙여 줘. "
+            "어색한 직역은 피하고 식당 메뉴판처럼 써줘. "
+            "(예: 'Breaded Beef Bites' -> '한입 비프까스 (바삭한 소고기 튀김)', "
+            "'Stuffed Pepper Soup' -> '스터프드 페퍼 수프 (고기와 피망이 들어간 토마토 수프)') "
+            "결과는 오직 원본 영문명을 Key로, 한글 번역명을 Value로 하는 JSON 객체만 반환해."
+        )
+
+        translations = {}
+        # Batch by 40 to avoid token limits
+        for i in range(0, len(names), 40):
+            chunk = names[i:i+40]
+            try:
+                loop = asyncio.get_event_loop()
+                resp = await loop.run_in_executor(None, lambda: self.model.generate_content(
+                    f"{system_prompt}\n\nTranslate: {json.dumps(chunk)}",
+                    generation_config={"response_mime_type": "application/json"}
+                ))
+                translations.update(json.loads(resp.text))
+            except: continue
+        return translations
 
 def setup_dining_scheduler(db):
     service = DiningService(db)
