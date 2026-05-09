@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from "react";
-import axios from "axios";
+import api from "@/lib/api";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -8,8 +8,6 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { MapPin, Utensils, Calendar as CalendarIcon } from "lucide-react";
 import { format, addDays, startOfDay } from "date-fns";
 import { ko } from "date-fns/locale";
-
-const API_BASE = process.env.REACT_APP_API_URL || "";
 
 export default function Dining() {
   const [loading, setLoading] = useState(true);
@@ -31,7 +29,7 @@ export default function Dining() {
   const fetchDiningData = useCallback(async (date) => {
     try {
       setLoading(true);
-      const res = await axios.get(`${API_BASE}/api/dining?date=${date}`, { withCredentials: true });
+      const res = await api.get(`/dining?date=${date}`);
       const data = Array.isArray(res.data) ? res.data : [];
       setDiningData(data);
       if (data.length > 0) {
