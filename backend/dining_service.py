@@ -140,14 +140,20 @@ class DiningService:
             # TRANSLATE
             if self.model:
                 try:
-                    all_names = list(set([i["name"] for m in menus for s in m["stations"] for i in s["items"]]))
+                    all_names = list(set([i["name"] for m in menus for s in m["stations"] for i in s["items"] if i.get("name")]))
                     if all_names:
-                        # Translate in chunks if needed, but for now just translate all at once or up to a reasonable limit
-                        translations = await self.batch_translate(all_names)
+                        # Translate in chunks of 30 to avoid prompt too long and ensure quality
+                        all_translations = {}
+                        for i in range(0, len(all_names), 30):
+                            chunk = all_names[i:i+30]
+                            translations = await self.batch_translate(chunk)
+                            all_translations.update(translations)
+                            await asyncio.sleep(1) # Rate limit protection
+                            
                         for m in menus:
                             for s in m["stations"]:
                                 for i in s["items"]: 
-                                    i["name_ko"] = translations.get(i["name"], i["name"])
+                                    i["name_ko"] = all_translations.get(i["name"], i["name"])
                 except Exception as e:
                     logger.error(f"Translation error: {e}")
 
@@ -196,7 +202,15 @@ class DiningService:
             resp = await loop.run_in_executor(None, lambda: self.model.generate_content(
                 prompt, generation_config={"response_mime_type": "application/json"}
             ))
-            return json.loads(resp.text)
+            
+            # Robust JSON extraction
+            text = resp.text.strip()
+            if text.startswith("```json"):
+                text = text.split("```json")[1].split("```")[0].strip()
+            elif text.startswith("```"):
+                text = text.split("```")[1].split("```")[0].strip()
+                
+            return json.loads(text)
         except Exception as e:
             logger.error(f"batch_translate error: {e}")
             return {}
