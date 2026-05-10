@@ -29,7 +29,8 @@ class DiningService:
         self.gemini_api_key = os.environ.get("GEMINI_API_KEY")
         if self.gemini_api_key:
             genai.configure(api_key=self.gemini_api_key)
-            self.model = genai.GenerativeModel('gemini-1.5-flash')
+            # Use a more modern/available model
+            self.model = genai.GenerativeModel('gemini-flash-latest')
         else:
             self.model = None
 
@@ -140,11 +141,15 @@ class DiningService:
             if self.model:
                 try:
                     all_names = list(set([i["name"] for m in menus for s in m["stations"] for i in s["items"]]))
-                    translations = await self.batch_translate(all_names[:50])
-                    for m in menus:
-                        for s in m["stations"]:
-                            for i in s["items"]: i["name_ko"] = translations.get(i["name"], i["name"])
-                except: pass
+                    if all_names:
+                        # Translate in chunks if needed, but for now just translate all at once or up to a reasonable limit
+                        translations = await self.batch_translate(all_names)
+                        for m in menus:
+                            for s in m["stations"]:
+                                for i in s["items"]: 
+                                    i["name_ko"] = translations.get(i["name"], i["name"])
+                except Exception as e:
+                    logger.error(f"Translation error: {e}")
 
             final_doc = {
                 "slug": slug,
@@ -176,14 +181,25 @@ class DiningService:
 
     async def batch_translate(self, items):
         if not items or not self.model: return {}
+        
+        system_prompt = (
+            "너는 미국 유학생을 위한 학식 번역가야. 주어진 영어 메뉴명을 한국인이 맛을 상상할 수 있게 의역하고 "
+            "괄호 안에 짧은 설명을 덧붙여 줘. 어색한 직역은 피하고 식당 메뉴판처럼 써줘. "
+            "(예: 'Breaded Beef Bites' -> '한입 비프까스 (바삭한 소고기 튀김)', "
+            "'Stuffed Pepper Soup' -> '스터프드 페퍼 수프 (고기와 피망이 들어간 토마토 수프)') "
+            "반드시 JSON 형식으로 응답하며, 키는 원본 영어명, 값은 번역된 한국어명이어야 해."
+        )
+
         try:
-            prompt = f"Map English menu names to natural Korean: {json.dumps(items)}"
+            prompt = f"{system_prompt}\n\nTranslate these items: {json.dumps(items)}"
             loop = asyncio.get_event_loop()
             resp = await loop.run_in_executor(None, lambda: self.model.generate_content(
                 prompt, generation_config={"response_mime_type": "application/json"}
             ))
             return json.loads(resp.text)
-        except: return {}
+        except Exception as e:
+            logger.error(f"batch_translate error: {e}")
+            return {}
 
 def setup_dining_scheduler(db):
     service = DiningService(db)
