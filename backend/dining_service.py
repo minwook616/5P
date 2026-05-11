@@ -15,9 +15,9 @@ logger = logging.getLogger("dining_service")
 PROXY_DOMAIN = "https://new.dining.iastate.edu/api"
 
 DINING_METADATA = {
-    "udm": {"id": 39, "title": "UDCC", "lat": "42.0253", "lng": "-93.6519"},
-    "friley": {"id": 30, "title": "Friley Windows", "lat": "42.0244", "lng": "-93.6502"},
-    "seasons": {"id": 23, "title": "Seasons Marketplace", "lat": "42.0227", "lng": "-93.6393"}
+    "udm": {"id": 39, "title": "UDCC", "lat": "42.0253", "lng": "-93.6519", "address": "Union Drive Community Center, Ames, IA 50011"},
+    "friley": {"id": 30, "title": "Friley Windows", "lat": "42.0244", "lng": "-93.6502", "address": "Friley Hall, Ames, IA 50012"},
+    "seasons": {"id": 23, "title": "Seasons Marketplace", "lat": "42.0227", "lng": "-93.6393", "address": "Maple-Willow-Larch Commons, Ames, IA 50011"}
 }
 
 DINING_SLUGS = list(DINING_METADATA.keys())
@@ -57,7 +57,7 @@ class DiningService:
 
             data = resp.json()
             if not data or not data.get("meals"):
-                await self.log_error(slug, date_str, "ISU API: No meals found for this date")
+                await self.log_error(slug, date_str, "No meals for this date")
                 return None
 
             # NEW PARSER (Object-based) - Super Defensive

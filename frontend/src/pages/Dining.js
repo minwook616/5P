@@ -57,14 +57,17 @@ export default function Dining() {
   }, [selectedDate, fetchDiningData]);
 
   const openMap = (hall) => {
+    const address = hall.address || {
+      "udm": "Union Drive Community Center, Ames, IA 50011",
+      "friley": "Friley Hall, Ames, IA 50012",
+      "seasons": "Maple-Willow-Larch Commons, Ames, IA 50011"
+    }[hall.slug];
+    
     const lat = hall.lat || ULTIMATE_COORDS[hall.slug]?.lat;
     const lng = hall.lng || ULTIMATE_COORDS[hall.slug]?.lng;
 
-    if (!lat || !lng) {
-      alert("지도 정보를 찾을 수 없습니다. v1.1.0 버전인지 확인해주세요.");
-      return;
-    }
-    const url = `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`;
+    const query = address ? encodeURIComponent(address) : `${lat},${lng}`;
+    const url = `https://www.google.com/maps/search/?api=1&query=${query}`;
     window.open(url, "_blank");
   };
 
@@ -140,9 +143,19 @@ export default function Dining() {
 
               {(!hall.menus || hall.menus.length === 0) ? (
                 <div className="py-24 border border-dashed border-[var(--line)] flex flex-col items-center justify-center bg-[var(--bg-card)]">
-                  <RefreshCw className="w-8 h-8 mb-4 text-[var(--text-dim)] opacity-20 animate-spin" />
-                  <p className="text-[10px] uppercase tracking-[0.3em] text-[var(--text-mute)] font-black">수집 중...</p>
-                  <p className="text-[9px] text-[var(--text-dim)] mt-4 italic text-center px-8">ISU 서버에서 데이터를 긁어오고 있습니다.<br/>10초 후 우측 상단 새로고침을 눌러보세요.</p>
+                  {hall.status === "No meals for this date" ? (
+                    <>
+                      <Utensils className="w-8 h-8 mb-4 text-[var(--text-dim)] opacity-20" />
+                      <p className="text-[10px] uppercase tracking-[0.3em] text-[var(--text-mute)] font-black">No meals for this date</p>
+                      <p className="text-[9px] text-[var(--text-dim)] mt-4 italic text-center px-8">오늘은 운영하지 않거나 메뉴 정보가 없습니다.</p>
+                    </>
+                  ) : (
+                    <>
+                      <RefreshCw className="w-8 h-8 mb-4 text-[var(--text-dim)] opacity-20 animate-spin" />
+                      <p className="text-[10px] uppercase tracking-[0.3em] text-[var(--text-mute)] font-black">수집 중...</p>
+                      <p className="text-[9px] text-[var(--text-dim)] mt-4 italic text-center px-8">ISU 서버에서 데이터를 긁어오고 있습니다.<br/>10초 후 우측 상단 새로고침을 눌러보세요.</p>
+                    </>
+                  )}
                 </div>
               ) : (
                 <Tabs defaultValue={hall.menus[0].section} className="w-full">
@@ -186,9 +199,11 @@ export default function Dining() {
                                           </p>
                                         )}
                                       </div>
-                                      <span className="text-[9px] text-[var(--text-dim)] fp-mono whitespace-nowrap bg-[var(--bg)] px-2 py-1 border border-[var(--line)] font-bold">
-                                        {item.totalCal} KCAL
-                                      </span>
+                                      {item.totalCal && item.totalCal !== "0" && (
+                                        <span className="text-[9px] text-[var(--text-dim)] fp-mono whitespace-nowrap bg-[var(--bg)] px-2 py-1 border border-[var(--line)] font-bold">
+                                          {item.totalCal} KCAL
+                                        </span>
+                                      )}
                                     </div>
                                   </div>
 
