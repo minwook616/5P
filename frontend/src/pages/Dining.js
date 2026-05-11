@@ -143,7 +143,7 @@ export default function Dining() {
 
               {(!hall.menus || hall.menus.length === 0) ? (
                 <div className="py-24 border border-dashed border-[var(--line)] flex flex-col items-center justify-center bg-[var(--bg-card)]">
-                  {hall.status === "No meals for this date" ? (
+                  {(hall.status || "").toLowerCase().includes("no meals") ? (
                     <>
                       <Utensils className="w-8 h-8 mb-4 text-[var(--text-dim)] opacity-20" />
                       <p className="text-[10px] uppercase tracking-[0.3em] text-[var(--text-mute)] font-black">No meals for this date</p>
