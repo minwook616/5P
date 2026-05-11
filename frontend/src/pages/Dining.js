@@ -176,16 +176,20 @@ export default function Dining() {
                                 <CardContent className="p-4 flex flex-col justify-between h-full space-y-4">
                                   <div className="space-y-2">
                                     <div className="flex justify-between items-start gap-4">
-                                      <h4 className="font-bold text-[15px] leading-tight group-hover:text-[var(--red)] transition-colors">
-                                        {item.name_ko || item.name}
-                                      </h4>
+                                      <div className="flex flex-col gap-1">
+                                        <h4 className="font-bold text-[15px] leading-tight group-hover:text-[var(--red)] transition-colors">
+                                          {item.name}
+                                        </h4>
+                                        {item.name_ko && item.name_ko !== item.name && (
+                                          <p className="text-[11px] text-[var(--text-dim)] font-medium leading-relaxed">
+                                            {item.name_ko}
+                                          </p>
+                                        )}
+                                      </div>
                                       <span className="text-[9px] text-[var(--text-dim)] fp-mono whitespace-nowrap bg-[var(--bg)] px-2 py-1 border border-[var(--line)] font-bold">
                                         {item.totalCal} KCAL
                                       </span>
                                     </div>
-                                    <p className="text-[10px] text-[var(--text-dim)] uppercase tracking-tight italic opacity-50 font-medium">
-                                      {item.name}
-                                    </p>
                                   </div>
 
                                   <div className="flex gap-1 pt-1">
