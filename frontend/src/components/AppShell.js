@@ -123,6 +123,14 @@ export default function AppShell() {
           </div>
         </aside>
       </div>
+
+      <footer className="border-t border-[var(--line)] mt-12 py-8">
+        <div className="max-w-5xl mx-auto px-6">
+          <p className="text-[10px] text-[var(--text-mute)] fp-mono uppercase tracking-widest text-center">
+            본 사이트는 서버 자원 효율화 및 개인정보 보호를 위해 삭제된 게시물은 즉시 파기하며, 별도의 백업을 보관하지 않습니다.
+          </p>
+        </div>
+      </footer>
     </div>
   );
 }
